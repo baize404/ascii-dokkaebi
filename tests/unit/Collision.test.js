@@ -41,8 +41,8 @@ describe('關卡資料', () => {
   });
 
   it('每座石燈都有對應的互動點', () => {
-    for (const l of LEVEL.lanterns) {
-      expect(LEVEL.interactables.some((i) => i.id === `lantern-${l.season}`)).toBe(true);
+    for (const [i] of LEVEL.lanternSpots.entries()) {
+      expect(LEVEL.interactables.some((it) => it.id === `lantern-${i}`)).toBe(true);
     }
   });
 });

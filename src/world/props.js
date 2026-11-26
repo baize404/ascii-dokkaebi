@@ -20,6 +20,7 @@ import {
   TorusGeometry,
   Vector3,
 } from 'three';
+import { CatmullRomCurve3, CircleGeometry, PlaneGeometry, ShaderMaterial, TubeGeometry } from 'three';
 import { mats, OBANGSAEK } from './materials.js';
 
 // ---------- 小工具 ----------
@@ -65,6 +66,29 @@ export function makeRoof(width, depth, height) {
   const roof = new Group();
   roof.add(new Mesh(geom, mats.roof));
   roof.add(at(box(width + 0.3, 0.26, 0.42, mats.ridge), 0, height - 0.05, 0));
+
+  // 瓦壟：沿著坡度排列的細長瓦片，讓屋頂在 ASCII 裡有直條紋理
+  const lift = (dy) => {
+    const sh = new Shape();
+    sh.moveTo(-half, dy);
+    sh.quadraticCurveTo(-half * 0.25, height * 0.2 + dy, 0, height + dy);
+    sh.quadraticCurveTo(half * 0.25, height * 0.2 + dy, half, dy);
+    return sh;
+  };
+  const strip = lift(0.11);
+  const inner = lift(0.03).getPoints(24).reverse();
+  for (const p of inner) strip.lineTo(p.x, p.y);
+  const stripGeom = new ExtrudeGeometry(strip, { depth: 0.13, bevelEnabled: false, curveSegments: 10 });
+  stripGeom.translate(0, 0, -0.065);
+  stripGeom.rotateY(-Math.PI / 2);
+  const count = Math.floor(width / 0.42);
+  const tiles = new InstancedMesh(stripGeom, mats.roofTile, count);
+  const m4 = new Matrix4();
+  for (let i = 0; i < count; i++) {
+    m4.makeTranslation(-width / 2 + 0.21 + i * 0.42, 0, 0);
+    tiles.setMatrixAt(i, m4);
+  }
+  roof.add(tiles);
   return roof;
 }
 
@@ -84,8 +108,13 @@ export function makeHanok({ w, d, door = 'east', glow = true }) {
   const winMat = glow ? mats.paperGlow : mats.paperDim;
   for (const sz of [-1, 1]) {
     for (const sx of [-1, 1]) {
-      g.add(at(box(1.2, 0.95, 0.08, winMat), sx * w * 0.24, 1.75, sz * (d / 2 + 0.04)));
-      g.add(at(box(0.06, 0.95, 0.1, mats.darkWood), sx * w * 0.24, 1.75, sz * (d / 2 + 0.05)));
+      const wx = sx * w * 0.24;
+      const wz = sz * (d / 2 + 0.04);
+      g.add(at(box(1.2, 0.95, 0.08, winMat), wx, 1.75, wz));
+      // 窗櫺（창살）：直條與橫條木格
+      for (const ox of [-0.3, 0, 0.3]) g.add(at(box(0.05, 0.95, 0.1, mats.darkWood), wx + ox, 1.75, wz + sz * 0.01));
+      g.add(at(box(1.2, 0.05, 0.1, mats.darkWood), wx, 1.75, wz + sz * 0.01));
+      g.add(at(box(1.3, 0.08, 0.12, mats.darkWood), wx, 2.25, wz + sz * 0.01));
     }
   }
 
@@ -93,8 +122,11 @@ export function makeHanok({ w, d, door = 'east', glow = true }) {
   const side = door === 'east' ? 1 : -1;
   g.add(at(box(0.1, 1.75, 1.3, mats.darkWood), side * (w / 2 + 0.05), 1.38, 0));
   g.add(at(box(0.12, 0.5, 0.5, glow ? mats.paperGlow : mats.paperDim), side * (w / 2 + 0.06), 1.8, 0));
-  // 門前石階
-  g.add(at(box(0.9, 0.25, 1.6, mats.stone), side * (w / 2 + 0.85), 0.13, 0));
+  // 門前的마루（木廊）與石階
+  g.add(at(box(0.8, 0.12, d * 0.86, mats.wood), side * (w / 2 + 0.4), 0.62, 0));
+  for (let i = -2; i <= 2; i++) g.add(at(box(0.82, 0.02, 0.04, mats.darkWood), side * (w / 2 + 0.4), 0.69, (i * d * 0.86) / 5));
+  for (const sz of [-1, 1]) g.add(at(box(0.12, 0.6, 0.12, mats.darkWood), side * (w / 2 + 0.75), 0.3, sz * d * 0.4));
+  g.add(at(box(0.9, 0.25, 1.6, mats.stone), side * (w / 2 + 1.25), 0.13, 0));
 
   const roof = makeRoof(w + 1.8, d + 2.2, 1.7);
   roof.position.y = 2.75;
@@ -170,7 +202,7 @@ export function makeJangseung({ female = false }) {
 }
 
 /** 石燈（석등）：回傳 setLit() 控制燈火。 */
-export function makeStoneLantern() {
+export function makeStoneLantern(carvingColor = 0x888888) {
   const g = new Group();
   g.add(at(box(0.95, 0.3, 0.95, mats.stone), 0, 0.15, 0));
   g.add(at(cyl(0.18, 0.22, 1.0, mats.stone, 8), 0, 0.8, 0));
@@ -179,6 +211,9 @@ export function makeStoneLantern() {
   const fire = at(box(0.42, 0.42, 0.42, fireMat), 0, 1.65, 0);
   g.add(fire);
   for (const sx of [-1, 1]) for (const sz of [-1, 1]) g.add(at(box(0.1, 0.5, 0.1, mats.stone), sx * 0.27, 1.65, sz * 0.27));
+  // 刻紋色牌（前後兩面），讓四盞燈遠看就能分辨
+  const plaqueMat = new MeshLambertMaterial({ color: carvingColor, emissive: carvingColor, emissiveIntensity: 0.25 });
+  for (const sz of [-1, 1]) g.add(at(box(0.26, 0.26, 0.04, plaqueMat), 0, 1.65, sz * 0.23));
   const cap = new Mesh(new ConeGeometry(0.72, 0.5, 4), mats.stone);
   cap.rotation.y = Math.PI / 4;
   g.add(at(cap, 0, 2.15, 0));
@@ -196,8 +231,13 @@ export function makeStoneLantern() {
     },
     setLit(on) {
       lit = on;
-      fireMat.color.setHex(on ? 0xffb04a : 0x1a1a1a);
+      fireMat.color.setHex(on ? 0xf2bd68 : 0x1a1a1a);
       light.intensity = on ? 14 : 0;
+      plaqueMat.emissiveIntensity = on ? 0.9 : 0.25;
+    },
+    /** 點錯時閃一下就熄 */
+    sputter(k) {
+      fireMat.color.setHex(k < 1 && Math.sin(k * 40) > 0 ? 0x8a5a2a : 0x1a1a1a);
     },
     flicker(t, phase) {
       if (lit) light.intensity = 13 + 3 * Math.sin(t * 9 + phase) * Math.sin(t * 3.7 + phase * 2);
@@ -363,4 +403,140 @@ export function makeWisp(withLight) {
   g.add(halo);
   if (withLight) g.add(new PointLight(0x5aa8ff, 3, 7, 1.4));
   return g;
+}
+
+// ---------- 2.0 新增：금줄、池塘、腳印、甕、石階、踏腳石、落葉 ----------
+
+/** 금줄（禁繩）：兩根木樁之間的稻草繩，掛著木炭、紅辣椒與白紙 */
+export function makeRopeGate(width) {
+  const g = new Group();
+  const half = width / 2;
+  for (const sx of [-1, 1]) g.add(at(cyl(0.12, 0.15, 1.6, mats.darkWood, 6), sx * half, 0.8, 0));
+  const curve = new CatmullRomCurve3([
+    new Vector3(-half, 1.35, 0),
+    new Vector3(-half * 0.4, 1.05, 0),
+    new Vector3(0, 0.98, 0),
+    new Vector3(half * 0.4, 1.05, 0),
+    new Vector3(half, 1.35, 0),
+  ]);
+  const rope = new Group();
+  rope.add(new Mesh(new TubeGeometry(curve, 24, 0.05, 5), mats.straw));
+  const charcoal = new MeshLambertMaterial({ color: 0x151515 });
+  const pepper = new MeshLambertMaterial({ color: 0xd65f4c, emissive: 0x401010 });
+  const paper = new MeshLambertMaterial({ color: 0xe2e8ef });
+  for (let i = 1; i < 8; i++) {
+    const p = curve.getPoint(i / 8);
+    const kind = i % 3;
+    if (kind === 0) rope.add(at(box(0.14, 0.12, 0.1, charcoal), p.x, p.y - 0.1, 0));
+    else if (kind === 1) {
+      const c = new Mesh(new ConeGeometry(0.05, 0.25, 5), pepper);
+      c.rotation.x = Math.PI;
+      rope.add(at(c, p.x, p.y - 0.16, 0));
+    } else rope.add(at(box(0.08, 0.3, 0.01, paper), p.x, p.y - 0.18, 0));
+  }
+  g.add(rope);
+  g.userData.rope = rope;
+  return g;
+}
+
+/** 池塘：會泛起波光的水面（自訂 shader）＋一圈石頭與蘆葦 */
+export function makePond(r, rand) {
+  const g = new Group();
+  const water = new Mesh(
+    new CircleGeometry(r, 40),
+    new ShaderMaterial({
+      uniforms: { uTime: { value: 0 }, uMoon: { value: 0 } },
+      vertexShader: 'varying vec2 vP; void main(){ vP = position.xy; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+      fragmentShader: `
+        uniform float uTime; uniform float uMoon; varying vec2 vP;
+        void main(){
+          float d = length(vP);
+          float ripple = sin(d * 9.0 - uTime * 1.6) * 0.5 + 0.5;
+          float sparkle = pow(max(0.0, sin(vP.x * 5.0 + uTime) * sin(vP.y * 6.0 - uTime * 1.3)), 6.0);
+          vec3 deep = vec3(0.03, 0.06, 0.10);
+          vec3 glint = mix(vec3(0.20, 0.42, 0.55), vec3(0.85, 0.82, 0.62), uMoon);
+          gl_FragColor = vec4(deep + glint * (ripple * 0.12 + sparkle * (0.5 + uMoon)), 1.0);
+        }`,
+    }),
+  );
+  water.rotation.x = -Math.PI / 2;
+  water.position.y = 0.06;
+  water.userData.noShadow = true;
+  g.add(water);
+  const n = Math.round(r * 8);
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2;
+    const rock = new Mesh(new IcosahedronGeometry(0.28 + rand() * 0.18, 0), mats.stone);
+    rock.scale.y = 0.6;
+    g.add(at(rock, Math.cos(a) * (r + 0.15), 0.1, Math.sin(a) * (r + 0.15)));
+  }
+  for (let i = 0; i < 6; i++) {
+    const a = rand() * Math.PI * 2;
+    g.add(at(new Mesh(new ConeGeometry(0.04, 0.9 + rand() * 0.5, 3), mats.pine), Math.cos(a) * (r - 0.2), 0.5, Math.sin(a) * (r - 0.2)));
+  }
+  g.userData.water = water;
+  return g;
+}
+
+/** 도깨비的發光腳印 */
+export function makeFootprint() {
+  const geom = new CircleGeometry(0.22, 10);
+  geom.scale(0.75, 1.3, 1);
+  const mesh = new Mesh(geom, new MeshBasicMaterial({ color: 0x67c5dc, transparent: true, opacity: 0.85 }));
+  mesh.rotation.x = -Math.PI / 2;
+  mesh.userData.noShadow = true;
+  return mesh;
+}
+
+/** 單一個甕（옹기），甕遊戲用 */
+export function makeOnggi(scale = 1) {
+  const g = new Group();
+  const body = new Mesh(new SphereGeometry(0.34, 12, 10), mats.onggi);
+  body.scale.set(1, 1.15, 1);
+  g.add(at(body, 0, 0.38, 0));
+  g.add(at(cyl(0.22, 0.26, 0.1, mats.darkWood, 12), 0, 0.78, 0));
+  g.add(at(new Mesh(new SphereGeometry(0.06, 6, 4), mats.darkWood), 0, 0.86, 0));
+  g.scale.setScalar(scale);
+  return g;
+}
+
+/** 石階（往 -z 方向一階一階升高） */
+export function makeSteps(count, width, rise, run) {
+  const g = new Group();
+  for (let i = 0; i < count; i++) g.add(at(box(width, rise * (i + 1), run, mats.stone), 0, (rise * (i + 1)) / 2, -i * run));
+  return g;
+}
+
+/** 沿著小路排列的踏腳石（디딤돌）：points 為 [x, y, z] */
+export function makeSteppingStones(points, rand) {
+  const mesh = new InstancedMesh(new CylinderGeometry(0.32, 0.36, 0.08, 7), mats.stone, points.length);
+  const m4 = new Matrix4();
+  const q = new Quaternion();
+  const sc = new Vector3();
+  points.forEach(([x, y, z], i) => {
+    q.setFromEuler(new Euler(0, rand() * Math.PI, 0));
+    const s = 0.8 + rand() * 0.5;
+    m4.compose(new Vector3(x, y + 0.04, z), q, sc.set(s, 1, s * (0.8 + rand() * 0.3)));
+    mesh.setMatrixAt(i, m4);
+  });
+  mesh.userData.noShadow = true;
+  return mesh;
+}
+
+/** 散落的落葉：spots 為 [x, z] */
+export function makeFallenLeaves(spots, rand, heightAt) {
+  const geom = new PlaneGeometry(0.22, 0.14);
+  geom.rotateX(-Math.PI / 2);
+  const mesh = new InstancedMesh(geom, new MeshLambertMaterial({ color: 0xffffff, side: DoubleSide }), spots.length);
+  const colors = [0xd65f4c, 0xd9873a, 0xc9a040, 0x8a5a2a];
+  const m4 = new Matrix4();
+  const q = new Quaternion();
+  spots.forEach(([x, z], i) => {
+    q.setFromEuler(new Euler((rand() - 0.5) * 0.3, rand() * Math.PI * 2, 0));
+    m4.compose(new Vector3(x, heightAt(x, z) + 0.03, z), q, new Vector3(1, 1, 1));
+    mesh.setMatrixAt(i, m4);
+    mesh.setColorAt(i, new Color(colors[Math.floor(rand() * colors.length)]));
+  });
+  mesh.userData.noShadow = true;
+  return mesh;
 }

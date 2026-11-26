@@ -7,29 +7,42 @@ import {
   FogExp2,
   Group,
   HemisphereLight,
+  InstancedMesh,
+  Matrix4,
   Mesh,
   MeshBasicMaterial,
   MeshLambertMaterial,
+  IcosahedronGeometry,
   OctahedronGeometry,
   PlaneGeometry,
+  Quaternion,
   Scene,
   SphereGeometry,
+  TorusGeometry,
   Vector3,
 } from 'three';
+import { heightAt } from '../data/level.js';
 import { ease, Tweens } from '../core/Tweens.js';
-import { makeBox } from './Collision.js';
-import { makeDokkaebiModel } from './characters.js';
+import { makeCatModel, makeDokkaebiModel, makeGrandmaModel } from './characters.js';
+import { buildColliders, moundWallStones } from './layout.js';
 import { mats } from './materials.js';
 import { Fireflies, ParticleSystem, Stars } from './Particles.js';
 import {
   box,
   makeAltar,
   makeChimney,
+  makeFallenLeaves,
+  makeFootprint,
   makeGrassField,
   makeHanok,
   makeJangseung,
   makeJars,
+  makeOnggi,
+  makePond,
+  makeRopeGate,
   makeShrineTree,
+  makeSteppingStones,
+  makeSteps,
   makeStoneLantern,
   makeStorehouse,
   makeTree,
@@ -42,57 +55,96 @@ import {
 const MOON_FROM = new Vector3(0, -2, -80);
 const MOON_TO = new Vector3(0, 30, -80);
 
-/** 粒子特效的預設參數（見 ParticleSystem.emit） */
+/** 四君子刻紋的代表色（石燈色牌與點燈特效） */
+export const CARVING_COLORS = { plum: 0xf2a0b8, orchid: 0xb8a0e8, chrysanthemum: 0xf2bd68, bamboo: 0x7fcf8a };
+
+/** 畫質等級 */
+export const QUALITY = {
+  low: { shadows: 0, grass: 0.35, particles: 0.4, fireflies: 30 },
+  medium: { shadows: 1024, grass: 0.7, particles: 0.7, fireflies: 50 },
+  high: { shadows: 2048, grass: 1, particles: 1, fireflies: 70 },
+};
+
+/** 粒子特效預設參數（見 ParticleSystem.emit） */
 const BURSTS = {
   dust: { count: 3, spread: 0.08, speed: 0.7, up: 0.35, color: 0x8b8577, life: 0.5, gravity: 0.6, drag: 3, size: 0.2 },
   spark: { count: 1, spread: 0.05, speed: 0.25, up: 0.7, color: 0xffa040, life: 0.8, gravity: -0.2, drag: 1, size: 0.07 },
-  item: { count: 28, spread: 0.2, speed: 1.6, up: 2.4, color: 0xffd36e, life: 0.9, gravity: 3.5, drag: 1.2, size: 0.13 },
-  lanternOn: { count: 34, spread: 0.15, speed: 2.2, up: 2.6, color: 0xffa64d, life: 0.9, gravity: 4, drag: 1, size: 0.12 },
+  item: { count: 28, spread: 0.2, speed: 1.6, up: 2.4, color: 0xf2bd68, life: 0.9, gravity: 3.5, drag: 1.2, size: 0.13 },
+  lanternOn: { count: 34, spread: 0.15, speed: 2.2, up: 2.6, color: 0xf2bd68, life: 0.9, gravity: 4, drag: 1, size: 0.12 },
   smoke: { count: 18, spread: 0.3, speed: 0.8, up: 1.0, color: 0x707686, life: 1.5, gravity: -0.4, drag: 1.5, size: 0.45 },
   door: { count: 16, spread: 0.4, speed: 0.9, up: 0.5, color: 0x8a8070, life: 1.2, gravity: 0.2, drag: 2, size: 0.35 },
-  dokkaebi: { count: 90, spread: 0.6, speed: 4, up: 3.2, color: 0x6fb7ff, life: 1.4, gravity: 2.2, drag: 1.2, size: 0.2 },
-  wrong: { count: 18, spread: 0.3, speed: 1.6, up: 1.8, color: 0xff6a5a, life: 0.8, gravity: 3, drag: 1, size: 0.14 },
-  correct: { count: 26, spread: 0.3, speed: 2, up: 2.6, color: 0xffe08a, life: 1, gravity: 3, drag: 1, size: 0.14 },
-  moon: { count: 4, spread: 3.5, speed: 0.4, up: 1.6, color: 0xfff1c4, life: 3, gravity: -0.3, drag: 0.4, size: 0.16 },
+  dokkaebi: { count: 90, spread: 0.6, speed: 4, up: 3.2, color: 0x67c5dc, life: 1.4, gravity: 2.2, drag: 1.2, size: 0.2 },
+  wrong: { count: 18, spread: 0.3, speed: 1.6, up: 1.8, color: 0xd65f4c, life: 0.8, gravity: 3, drag: 1, size: 0.14 },
+  correct: { count: 26, spread: 0.3, speed: 2, up: 2.6, color: 0xf2bd68, life: 1, gravity: 3, drag: 1, size: 0.14 },
+  moon: { count: 4, spread: 3.5, speed: 0.4, up: 1.6, color: 0xe2e8ef, life: 3, gravity: -0.3, drag: 0.4, size: 0.16 },
+  sleep: { count: 1, spread: 0.05, speed: 0.1, up: 0.5, color: 0xe2e8ef, life: 1.6, gravity: -0.1, drag: 0.5, size: 0.1 },
+  tap: { count: 10, spread: 0.1, speed: 1.2, up: 0.3, color: 0xf2bd68, life: 0.5, gravity: 0.5, drag: 3, size: 0.12 },
+  blocked: { count: 10, spread: 0.1, speed: 1.2, up: 0.3, color: 0xd65f4c, life: 0.5, gravity: 0.5, drag: 3, size: 0.12 },
 };
 
-/** 地面這類大平面：用頂點顏色做出深淺不一的斑塊 */
-function paintNoise(geometry, baseHex, amount, rand) {
+/** 四季點燈特效 */
+const SEASON_BURSTS = {
+  plum: { count: 40, spread: 0.4, speed: 1.2, up: 1.6, color: 0xf2a0b8, life: 3, gravity: 0.4, drag: 1.2, size: 0.13 },
+  orchid: { count: 30, spread: 0.6, speed: 0.8, up: 1.2, color: 0xc8ff8a, life: 2.5, gravity: -0.3, drag: 1, size: 0.12 },
+  chrysanthemum: { count: 40, spread: 0.4, speed: 1.5, up: 2.0, color: 0xd9873a, life: 3, gravity: 0.5, drag: 1, size: 0.15 },
+  bamboo: { count: 50, spread: 1.6, speed: 0.3, up: 0.2, color: 0xe2e8ef, life: 3.5, gravity: 0.35, drag: 0.8, size: 0.11 },
+};
+
+/** 地形：依 heightAt 起伏、帶頂點顏色斑塊的平面 */
+function makeTerrain(width, depth, cx, cz, segments, baseHex, amount, rand, yOffset = 0) {
+  const geom = new PlaneGeometry(width, depth, segments[0], segments[1]);
+  geom.rotateX(-Math.PI / 2);
+  geom.translate(cx, 0, cz);
+  const pos = geom.attributes.position;
   const base = new Color(baseHex);
-  const pos = geometry.attributes.position;
   const colors = new Float32Array(pos.count * 3);
   for (let i = 0; i < pos.count; i++) {
     const x = pos.getX(i);
-    const y = pos.getY(i);
-    const n = Math.sin(x * 0.35 + 1.3) * Math.cos(y * 0.29 - 0.7) * 0.5 + Math.sin(x * 0.9 + y * 0.7) * 0.3 + (rand() - 0.5) * 0.5;
+    const z = pos.getZ(i);
+    pos.setY(i, heightAt(x, z) + yOffset);
+    const n = Math.sin(x * 0.35 + 1.3) * Math.cos(z * 0.29 - 0.7) * 0.5 + Math.sin(x * 0.9 + z * 0.7) * 0.3 + (rand() - 0.5) * 0.5;
     const k = 1 + n * amount;
     colors[i * 3] = base.r * k;
     colors[i * 3 + 1] = base.g * k;
     colors[i * 3 + 2] = base.b * k;
   }
-  geometry.setAttribute('color', new Float32BufferAttribute(colors, 3));
+  geom.setAttribute('color', new Float32BufferAttribute(colors, 3));
+  geom.computeVertexNormals();
+  const mesh = new Mesh(geom, new MeshLambertMaterial({ vertexColors: true }));
+  mesh.userData.isGround = true;
+  mesh.userData.noShadow = true;
+  return mesh;
 }
 
 /**
- * 依照關卡資料蓋出 3D 村落，並提供場景效果（點燈、開門、粒子、도깨비的動作、月亮升起）。
- * 不包含遊戲規則。
+ * 依關卡資料蓋出 3D 村落，提供場景效果（點燈、開門、粒子、角色動作、月亮升起）。
+ * 不包含遊戲規則；遊戲狀態由 session 透過下面的方法同步進來。
  */
 export class World {
-  constructor(level) {
+  /**
+   * @param level 關卡資料
+   * @param lanternLayout 四個石燈位置各自的刻紋 id
+   */
+  constructor(level, lanternLayout) {
     this.level = level;
+    this.lanternLayout = lanternLayout;
     this.scene = new Scene();
     this.tweens = new Tweens();
-    this.colliders = [];
     this.interactables = [];
     this.pickables = [];
     this.facePoints = new Map();
-    this.lanterns = new Map();
+    this.lanterns = [];
     this.wisps = [];
     this.swayers = [];
     this.strips = [];
     this.emitAcc = {};
     this.time = 0;
     this.dokAction = null;
+    this.quality = QUALITY.high;
+    this.reduceMotion = false;
+    this.ropeOpen = false;
+    this.colliders = buildColliders(level, { ropeOpen: false });
+    this.heightAt = heightAt;
 
     const rand = seededRandom(20261126);
     this.#buildEnvironment(rand);
@@ -100,8 +152,9 @@ export class World {
     this.#buildWalls();
     this.#buildVillage(rand);
     this.#buildShrine(rand);
+    this.#buildCharacters();
     this.#buildTrees(rand);
-    this.#buildGrass(rand);
+    this.#buildDetails(rand);
     this.#buildInteractables();
     this.#setupShadows();
   }
@@ -110,39 +163,36 @@ export class World {
     return this.level.bounds;
   }
 
-  get shrinePosition() {
-    return new Vector3(this.level.altar.x, 0, this.level.altar.z);
-  }
-
-  /** 所有粒子材質，Game 依畫面大小更新它們的尺寸比例 */
   get pointMaterials() {
     return [this.particles.material, this.fireflies.material, this.stars.material];
+  }
+
+  /** 物件放在地面上（依地形高度） */
+  #place(obj, x, z, yOffset = 0) {
+    obj.position.set(x, heightAt(x, z) + yOffset, z);
+    this.scene.add(obj);
+    return obj;
   }
 
   // ---------- 建構 ----------
 
   #buildEnvironment(rand) {
-    this.scene.background = new Color(0x000000);
-    this.scene.fog = new FogExp2(0x000000, 0.016);
+    this.scene.background = new Color(0x080d16);
+    this.scene.fog = new FogExp2(0x080d16, 0.017);
     this.ambient = new AmbientLight(0x5a6a9a, 2.0);
     this.hemi = new HemisphereLight(0x8095d0, 0x2a2a1e, 1.8);
 
-    // 星光：唯一會投射陰影的光
-    this.starlight = new DirectionalLight(0x9fb0e0, 2.6);
+    // 星光：唯一投射陰影的光
+    this.starlight = new DirectionalLight(0x9fb0e0, 2.4);
     this.starlight.position.set(-18, 36, -10);
     this.starlight.castShadow = true;
     const cam = this.starlight.shadow.camera;
-    cam.left = -36;
-    cam.right = 36;
-    cam.top = 36;
-    cam.bottom = -36;
-    cam.near = 1;
-    cam.far = 100;
+    Object.assign(cam, { left: -36, right: 36, top: 36, bottom: -36, near: 1, far: 100 });
     this.starlight.shadow.mapSize.set(2048, 2048);
     this.starlight.shadow.bias = -0.0005;
     this.starlight.shadow.normalBias = 0.04;
 
-    this.moonlight = new DirectionalLight(0xfff1c4, 0);
+    this.moonlight = new DirectionalLight(0xe2e8ef, 0);
     this.moonlight.position.set(0, 30, -40);
     this.scene.add(this.ambient, this.hemi, this.starlight, this.moonlight);
 
@@ -156,42 +206,47 @@ export class World {
     this.moon.visible = false;
     this.scene.add(this.moon);
 
-    // 引導光點：一顆旋轉的黃色菱形
+    // 新手引導用的光點（只在開場指向장승）
     this.marker = new Group();
-    this.marker.add(new Mesh(new OctahedronGeometry(0.5, 0), new MeshBasicMaterial({ color: 0xffd36e })));
+    this.marker.add(new Mesh(new OctahedronGeometry(0.45, 0), new MeshBasicMaterial({ color: 0xf2bd68 })));
     this.marker.visible = false;
     this.markerBase = new Vector3();
     this.scene.add(this.marker);
 
-    this.particles = new ParticleSystem(1200);
+    // 互動對象的地面光圈
+    this.highlight = new Mesh(new TorusGeometry(1, 0.05, 6, 40), new MeshBasicMaterial({ color: 0xf2bd68, transparent: true, opacity: 0.8 }));
+    this.highlight.rotation.x = -Math.PI / 2;
+    this.highlight.visible = false;
+    this.scene.add(this.highlight);
+
+    // 點擊目的地的光圈
+    this.tapRing = new Mesh(new TorusGeometry(0.35, 0.04, 6, 24), new MeshBasicMaterial({ color: 0xf2bd68, transparent: true, opacity: 0 }));
+    this.tapRing.rotation.x = -Math.PI / 2;
+    this.scene.add(this.tapRing);
+
+    this.particles = new ParticleSystem(1400);
     this.fireflies = new Fireflies(this.level.bounds, 70, rand);
     this.stars = new Stars(280, rand);
     this.scene.add(this.particles.points, this.fireflies.points, this.stars.points);
-
-    for (const obj of [this.moon, halo, this.marker.children[0]]) obj.userData.noShadow = true;
+    for (const obj of [this.moon, halo, this.marker.children[0], this.highlight, this.tapRing]) obj.userData.noShadow = true;
   }
 
   #buildGround(rand) {
-    const groundGeom = new PlaneGeometry(90, 90, 90, 90);
-    paintNoise(groundGeom, 0x2e4034, 0.4, rand);
-    const ground = new Mesh(groundGeom, new MeshLambertMaterial({ vertexColors: true }));
-    ground.rotation.x = -Math.PI / 2;
-    ground.userData.isGround = true;
-    ground.userData.noShadow = true;
+    const ground = makeTerrain(90, 90, 0, 0, [120, 120], 0x2e4034, 0.4, rand);
     this.scene.add(ground);
     this.pickables.push(ground);
-
     for (const [x, z, w, d] of this.level.paths) {
-      const geom = new PlaneGeometry(w, d, Math.ceil(w * 2), Math.ceil(d * 2));
-      paintNoise(geom, 0x6a6252, 0.3, rand);
-      const path = new Mesh(geom, new MeshLambertMaterial({ vertexColors: true }));
-      path.rotation.x = -Math.PI / 2;
-      path.position.set(x, 0.01, z);
-      path.userData.isGround = true;
-      path.userData.noShadow = true;
+      const path = makeTerrain(w, d, x, z, [Math.ceil(w * 2), Math.ceil(d * 2)], 0x6a6252, 0.3, rand, 0.02);
       this.scene.add(path);
       this.pickables.push(path);
     }
+    // 主參道的踏腳石
+    const stones = [];
+    for (let z = 23; z > -12.8; z -= 1.15) {
+      const x = (Math.round(z / 1.15) % 2 ? 0.45 : -0.45) + (rand() - 0.5) * 0.2;
+      stones.push([x, heightAt(x, z) + 0.02, z]);
+    }
+    this.scene.add(makeSteppingStones(stones, rand));
   }
 
   #buildWalls() {
@@ -200,9 +255,8 @@ export class World {
     const east = maxX + 0.6;
     const north = minZ - 0.6;
     const south = maxZ + 0.6;
-    const width = east - west;
     const segments = [
-      [makeWallSegment(width + 0.8, 'x'), 0, north],
+      [makeWallSegment(east - west + 0.8, 'x'), 0, north],
       [makeWallSegment(south - north, 'z'), west, (north + south) / 2],
       [makeWallSegment(south - north, 'z'), east, (north + south) / 2],
       [makeWallSegment(east - 3.2, 'x'), (east + 3.2) / 2, south],
@@ -213,81 +267,95 @@ export class World {
       mesh.position.z = z;
       this.scene.add(mesh);
     }
-    // 村口的門柱
-    for (const sx of [-1, 1]) {
-      const post = box(0.5, 2.6, 0.5, mats.darkWood);
-      post.position.set(sx * 3.2, 1.3, south);
-      this.scene.add(post);
-    }
+    for (const sx of [-1, 1]) this.#place(box(0.5, 2.6, 0.5, mats.darkWood), sx * 3.2, south, 1.3);
   }
 
   #buildVillage(rand) {
     const L = this.level;
     this.houseGroups = new Map();
+    this.windowMeshes = [];
     for (const h of L.houses) {
       const g = makeHanok(h);
-      g.position.set(h.x, 0, h.z);
-      this.scene.add(g);
+      this.#place(g, h.x, h.z);
       this.houseGroups.set(h.id, g);
-      this.colliders.push(makeBox(h.x, h.z, h.w + 0.8, h.d + 0.8));
+      g.traverse((o) => {
+        if (o.isMesh && (o.material === mats.paperGlow || o.material === mats.paperDim)) this.windowMeshes.push(o);
+      });
     }
 
-    // 廚房旁的煙囪
     const kitchen = L.houses.find((h) => h.id === 'kitchen');
-    this.chimneyTop = new Vector3(kitchen.x - kitchen.w / 2 - 1.0, 2.7, kitchen.z - 1.2);
-    const chimney = makeChimney();
-    chimney.position.set(this.chimneyTop.x, 0, this.chimneyTop.z);
-    this.scene.add(chimney);
-    this.colliders.push(makeBox(this.chimneyTop.x, this.chimneyTop.z, 0.9, 0.9));
+    this.chimneyTop = new Vector3(kitchen.x - kitchen.w / 2 - 1.0, 0, kitchen.z - 1.2);
+    this.#place(makeChimney(), this.chimneyTop.x, this.chimneyTop.z);
+    this.chimneyTop.y = heightAt(this.chimneyTop.x, this.chimneyTop.z) + 2.7;
 
     const s = L.storehouse;
     this.storehouse = makeStorehouse(s);
-    this.storehouse.group.position.set(s.x, 0, s.z);
-    this.scene.add(this.storehouse.group);
-    this.colliders.push(makeBox(s.x, s.z, s.w + 0.6, s.d + 0.6));
+    this.#place(this.storehouse.group, s.x, s.z);
 
     this.well = makeWell();
-    this.well.position.set(L.well.x, 0, L.well.z);
-    this.scene.add(this.well);
-    this.colliders.push(makeBox(L.well.x, L.well.z, 2.6, 2.4));
+    this.#place(this.well, L.well.x, L.well.z);
+    this.wellBucket = this.well.children[this.well.children.length - 1];
 
-    this.jangseung = L.jangseung.map((j) => {
-      const g = makeJangseung(j);
-      g.position.set(j.x, 0, j.z);
-      this.scene.add(g);
-      this.colliders.push(makeBox(j.x, j.z, 0.9, 0.9));
-      return g;
+    this.jangseung = L.jangseung.map((j) => this.#place(makeJangseung(j), j.x, j.z));
+
+    L.lanternSpots.forEach((spot, i) => {
+      const carving = this.lanternLayout[i];
+      const lantern = makeStoneLantern(CARVING_COLORS[carving]);
+      this.#place(lantern.group, spot.x, spot.z);
+      lantern.carving = carving;
+      this.lanterns.push(lantern);
     });
 
-    for (const l of L.lanterns) {
-      const lantern = makeStoneLantern();
-      lantern.group.position.set(l.x, 0, l.z);
-      this.scene.add(lantern.group);
-      this.lanterns.set(l.season, lantern);
-      this.colliders.push(makeBox(l.x, l.z, 1.0, 1.0));
-    }
+    this.jars = makeJars(rand);
+    this.#place(this.jars, L.jars.x, L.jars.z);
 
-    const jars = makeJars(rand);
-    jars.position.set(L.jars.x, 0, L.jars.z);
-    this.scene.add(jars);
-    this.colliders.push(makeBox(L.jars.x, L.jars.z, 3.2, 2.2));
+    this.pond = makePond(L.pond.r, rand);
+    this.#place(this.pond, L.pond.x, L.pond.z);
+
+    // 도깨비的腳印：左右交錯，沿著行進方向
+    this.footprints = new Group();
+    L.footprints.forEach(([x, z], i) => {
+      const next = L.footprints[Math.min(i + 1, L.footprints.length - 1)];
+      const prev = L.footprints[Math.max(i - 1, 0)];
+      const dir = Math.atan2(next[0] - prev[0], next[1] - prev[1]);
+      const side = i % 2 ? 0.16 : -0.16;
+      const fp = makeFootprint();
+      fp.position.set(x + Math.cos(dir) * side, heightAt(x, z) + 0.04, z - Math.sin(dir) * side);
+      fp.rotation.z = -dir;
+      this.footprints.add(fp);
+    });
+    this.scene.add(this.footprints);
   }
 
   #buildShrine(rand) {
-    const { shrine, altar } = this.level;
+    const { shrineTree, altar, rope, mound } = this.level;
     this.shrineTree = makeShrineTree(rand);
-    this.shrineTree.position.set(shrine.x, 0, shrine.z);
-    this.scene.add(this.shrineTree);
-    this.colliders.push(makeBox(shrine.x, shrine.z, 2.4, 2.4));
-    this.colliders.push(makeBox(shrine.x + 1.8, shrine.z + 0.9, 1.6, 1.6));
+    this.#place(this.shrineTree, shrineTree.x, shrineTree.z);
     this.shrineTree.traverse((o) => {
       if (o.userData.flutter !== undefined) this.strips.push(o);
     });
 
+    // 山丘外圍的石牆（和碰撞一致）
+    const stones = moundWallStones(this.level);
+    const wall = new InstancedMesh(new IcosahedronGeometry(0.55, 0), mats.darkStone, stones.length);
+    const m4 = new Matrix4();
+    stones.forEach(({ x, z, a }, i) => {
+      m4.compose(new Vector3(x, heightAt(x, z) + 0.35, z), new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), a * 3.1), new Vector3(1, 0.85, 1));
+      wall.setMatrixAt(i, m4);
+    });
+    this.scene.add(wall);
+
+    // 入口石階
+    const steps = makeSteps(4, 3.2, 0.22, 0.45);
+    steps.position.set(mound.x, heightAt(mound.x, rope.z + 0.2) - 0.05, rope.z - 0.3);
+    this.scene.add(steps);
+
+    this.ropeGate = makeRopeGate(rope.w);
+    this.#place(this.ropeGate, rope.x, rope.z);
+
     this.altar = makeAltar();
-    this.altar.group.position.set(altar.x, 0, altar.z);
-    this.scene.add(this.altar.group);
-    this.colliders.push(makeBox(altar.x, altar.z, 2.4, 1.4));
+    this.#place(this.altar.group, altar.x, altar.z);
+    this.altarTop = new Vector3(altar.x, heightAt(altar.x, altar.z) + 0.8, altar.z);
 
     for (let i = 0; i < 3; i++) {
       const wisp = makeWisp(i < 2);
@@ -297,62 +365,165 @@ export class World {
       this.wisps.push(wisp);
     }
 
+    // 甕遊戲：三個甕與一團月光
+    this.shellJars = [-0.7, 0, 0.7].map((dx) => {
+      const jar = makeOnggi(0.75);
+      jar.position.set(altar.x + dx, this.altarTop.y, altar.z);
+      jar.visible = false;
+      this.scene.add(jar);
+      return jar;
+    });
+    this.moonOrb = new Mesh(new SphereGeometry(0.16, 12, 10), new MeshBasicMaterial({ color: 0xfff1c4 }));
+    this.moonOrb.visible = false;
+    this.moonOrb.userData.noShadow = true;
+    this.scene.add(this.moonOrb);
+  }
+
+  #buildCharacters() {
+    const { dokkaebi, grandma, catSpots } = this.level;
     this.dokkaebi = makeDokkaebiModel();
-    this.dokBase = new Vector3(altar.x, 0, altar.z - 2.2);
+    this.dokBase = new Vector3(dokkaebi.x, heightAt(dokkaebi.x, dokkaebi.z), dokkaebi.z);
     this.dokkaebi.root.position.copy(this.dokBase);
     this.dokkaebi.root.visible = false;
     this.scene.add(this.dokkaebi.root);
+
+    this.grandma = makeGrandmaModel();
+    this.grandma.root.rotation.y = Math.PI / 2; // 面向東邊的小路
+    this.grandma.root.scale.setScalar(0.95);
+    this.#place(this.grandma.root, grandma.x, grandma.z, 0.42);
+    this.grandmaAwake = false;
+
+    this.cat = makeCatModel();
+    this.catStage = 0;
+    // 黑貓第一個地點坐在一塊石頭上
+    const rock = new Mesh(new IcosahedronGeometry(0.45, 0), mats.stone);
+    rock.scale.y = 0.6;
+    this.#place(rock, catSpots[0].x, catSpots[0].z, 0.25);
+    this.scene.add(this.cat.root);
+    this.#placeCat(0);
+  }
+
+  #placeCat(stage) {
+    const spots = this.level.catSpots;
+    if (stage >= spots.length) {
+      // 給了帽子之後，貓去할머니身邊
+      const g = this.level.grandma;
+      this.cat.root.position.set(g.x + 0.7, heightAt(g.x, g.z) + 0.62, g.z + 0.6);
+      this.cat.hat.visible = false;
+      this.cat.root.rotation.y = Math.PI / 2;
+      return;
+    }
+    const s = spots[stage];
+    this.cat.root.position.set(s.x, heightAt(s.x, s.z) + s.y, s.z);
+    this.cat.root.rotation.y = stage === 2 ? Math.PI : 0.6;
+    this.cat.hat.visible = true;
   }
 
   #buildTrees(rand) {
     for (const t of this.level.trees) {
       const tree = makeTree(t.kind, rand);
-      tree.position.set(t.x, 0, t.z);
-      this.scene.add(tree);
+      this.#place(tree, t.x, t.z);
       this.swayers.push(tree);
-      this.colliders.push(makeBox(t.x, t.z, 0.8, 0.8));
     }
   }
 
-  #buildGrass(rand) {
+  #buildDetails(rand) {
     const paths = this.level.paths;
     const near = this.level.interactables;
     const isFree = (x, z) =>
       !this.colliders.some((b) => x > b.minX - 0.3 && x < b.maxX + 0.3 && z > b.minZ - 0.3 && z < b.maxZ + 0.3) &&
       !paths.some(([px, pz, w, d]) => Math.abs(x - px) < w / 2 + 0.2 && Math.abs(z - pz) < d / 2 + 0.2) &&
-      !near.some((i) => Math.hypot(i.x - x, i.z - z) < 1.3);
-    const grass = makeGrassField(1400, this.level.bounds, rand, isFree);
-    grass.traverse((o) => (o.userData.noShadow = true));
-    this.scene.add(grass);
+      !near.some((i) => Math.hypot(i.x - x, i.z - z) < 1.3) &&
+      Math.hypot(x - this.level.pond.x, z - this.level.pond.z) > this.level.pond.r + 0.4;
+    this.grass = makeGrassField(1400, this.level.bounds, rand, isFree);
+    // 草叢跟著地形高度
+    for (const mesh of this.grass.children) {
+      const m4 = new Matrix4();
+      const p = new Vector3();
+      const q = new Quaternion();
+      const s = new Vector3();
+      for (let i = 0; i < mesh.count; i++) {
+        mesh.getMatrixAt(i, m4);
+        m4.decompose(p, q, s);
+        p.y += heightAt(p.x, p.z);
+        m4.compose(p, q, s);
+        mesh.setMatrixAt(i, m4);
+      }
+      mesh.userData.fullCount = mesh.count;
+      mesh.userData.noShadow = true;
+    }
+    this.scene.add(this.grass);
+
+    // 樹下與山丘上的落葉
+    const spots = [];
+    for (const t of [...this.level.trees, this.level.shrineTree]) {
+      for (let i = 0; i < 14; i++) {
+        const a = rand() * Math.PI * 2;
+        const r = 0.6 + rand() * 2.4;
+        spots.push([t.x + Math.cos(a) * r, t.z + Math.sin(a) * r]);
+      }
+    }
+    this.scene.add(makeFallenLeaves(spots, rand, heightAt));
   }
 
   #buildInteractables() {
     const targets = {
       stele: this.jangseung,
+      pond: [this.pond],
       kitchen: [this.houseGroups.get('kitchen')],
-      'house-nw': [this.houseGroups.get('house-nw')],
-      'house-se': [this.houseGroups.get('house-se')],
+      jars: [this.jars],
       well: [this.well],
       storehouse: [this.storehouse.group],
+      footprints: [this.footprints],
+      grandma: [this.grandma.root],
+      screen: [this.houseGroups.get('grandma-house')],
+      'house-se': [this.houseGroups.get('house-se')],
+      rope: [this.ropeGate],
       altar: [this.altar.group, this.shrineTree],
+      cat: [this.cat.root],
     };
-    for (const [season, lantern] of this.lanterns) targets[`lantern-${season}`] = [lantern.group];
-
+    this.lanterns.forEach((l, i) => (targets[`lantern-${i}`] = [l.group]));
     for (const def of this.level.interactables) {
       const objects = targets[def.id] ?? [];
       for (const obj of objects) {
         obj.userData.interactId = def.id;
         this.pickables.push(obj);
       }
-      // 互動時角色要面向的點：相關物件的中心（祭壇只看祭壇本身）
-      const faceObjs = def.id === 'altar' ? [this.altar.group] : objects;
-      if (faceObjs.length) {
-        const c = new Vector3();
-        for (const o of faceObjs) c.add(o.position);
-        this.facePoints.set(def.id, c.divideScalar(faceObjs.length));
-      }
       this.interactables.push({ ...def, position: new Vector3(def.x, 0, def.z) });
     }
+    this.#updateFacePoints();
+  }
+
+  #updateFacePoints() {
+    const L = this.level;
+    const set = (id, x, z) => this.facePoints.set(id, new Vector3(x, 0, z));
+    set('stele', 0, 19.5);
+    set('pond', L.pond.x, L.pond.z);
+    set('kitchen', -7.5, 9.5);
+    set('jars', L.jars.x, L.jars.z);
+    set('well', L.well.x, L.well.z);
+    set('storehouse', L.storehouse.x - 2.5, L.storehouse.z);
+    set('footprints', 5.5, -3.4);
+    set('grandma', L.grandma.x, L.grandma.z);
+    set('screen', -9.2, 1);
+    set('house-se', 9.5, 12);
+    set('rope', L.rope.x, L.rope.z);
+    set('altar', L.altar.x, L.altar.z);
+    L.lanternSpots.forEach((s, i) => set(`lantern-${i}`, s.x, s.z));
+    this.#updateCatInteractable();
+  }
+
+  #updateCatInteractable() {
+    const it = this.interactables.find((i) => i.id === 'cat');
+    const stage = Math.min(this.catStage, this.level.catStands.length - 1);
+    const stand = this.level.catStands[stage];
+    if (it) {
+      it.x = stand.x;
+      it.z = stand.z;
+      it.position.set(stand.x, 0, stand.z);
+      it.disabled = this.catStage >= 3;
+    }
+    this.facePoints.set('cat', this.cat.root.position.clone());
   }
 
   #setupShadows() {
@@ -363,187 +534,445 @@ export class World {
     });
   }
 
+  // ---------- 查詢 ----------
+
   interactable(id) {
-    return this.interactables.find((i) => i.id === id);
+    return this.interactables.find((i) => i.id === id && !i.disabled);
+  }
+
+  activeInteractables() {
+    return this.interactables.filter((i) => !i.disabled);
   }
 
   facePoint(id) {
     return this.facePoints.get(id) ?? null;
   }
 
-  // ---------- 場景效果 ----------
-
-  /** 在 pos 噴出一組預設粒子特效 */
-  burst(name, pos, overrides = {}) {
-    const preset = BURSTS[name];
-    if (preset) this.particles.emit({ ...preset, ...overrides, x: pos.x, y: pos.y, z: pos.z });
-  }
-
-  /** 每秒約 rate 次呼叫 fn（環境粒子用） */
-  #emitRate(key, rate, dt, fn) {
-    this.emitAcc[key] = (this.emitAcc[key] ?? Math.random()) + rate * dt;
-    while (this.emitAcc[key] >= 1) {
-      this.emitAcc[key] -= 1;
-      fn();
-    }
-  }
-
-  /** 把引導光點移到 pos 上方；傳 null 隱藏。 */
-  setMarker(pos) {
-    this.marker.visible = Boolean(pos);
-    if (pos) this.markerBase.set(pos.x, pos.y, pos.z);
-  }
-
-  litSeasons() {
-    return [...this.lanterns].filter(([, lantern]) => lantern.lit).map(([season]) => season);
-  }
-
-  lanternPosition(season) {
-    const p = this.lanterns.get(season).group.position;
-    return new Vector3(p.x, 1.7, p.z);
-  }
-
-  syncLanterns(litSeasons) {
-    for (const [season, lantern] of this.lanterns) {
-      const on = litSeasons.includes(season);
-      if (on && !lantern.lit) this.burst('lanternOn', this.lanternPosition(season));
-      if (!on && lantern.lit) this.burst('smoke', this.lanternPosition(season));
-      lantern.setLit(on);
-    }
-  }
-
-  openStorehouse() {
-    const { door, lock, side, group } = this.storehouse;
-    lock.visible = false;
-    const doorWorld = group.position.clone().add(new Vector3(door.position.x, 0.6, 0));
-    this.burst('door', doorWorld);
-    return this.tweens.add(0.8, (k) => {
-      door.rotation.y = side * k * 1.9;
-    });
-  }
-
-  showOfferings() {
-    this.altar.offerings.visible = true;
-    this.burst('correct', new Vector3(this.level.altar.x, 1.2, this.level.altar.z));
+  lanternPosition(spot) {
+    const p = this.lanterns[spot].group.position;
+    return new Vector3(p.x, p.y + 1.7, p.z);
   }
 
   get dokkaebiHead() {
     return this.dokkaebi.head.getWorldPosition(new Vector3());
   }
 
+  // ---------- 設定 ----------
+
+  setQuality(name) {
+    const q = QUALITY[name] ?? QUALITY.high;
+    this.quality = q;
+    const light = this.starlight;
+    light.castShadow = q.shadows > 0;
+    if (q.shadows && light.shadow.mapSize.x !== q.shadows) {
+      light.shadow.mapSize.set(q.shadows, q.shadows);
+      light.shadow.map?.dispose();
+      light.shadow.map = null;
+    }
+    for (const mesh of this.grass.children) mesh.count = Math.round(mesh.userData.fullCount * q.grass);
+    this.fireflies.geometry.setDrawRange(0, q.fireflies);
+  }
+
+  setReduceMotion(on) {
+    this.reduceMotion = on;
+  }
+
+  // ---------- 場景效果 ----------
+
+  burst(name, pos, overrides = {}) {
+    const preset = BURSTS[name] ?? SEASON_BURSTS[name];
+    if (!preset) return;
+    const count = Math.max(1, Math.round((overrides.count ?? preset.count) * this.quality.particles * (this.reduceMotion ? 0.5 : 1)));
+    this.particles.emit({ ...preset, ...overrides, count, x: pos.x, y: pos.y, z: pos.z });
+  }
+
+  #emitRate(key, rate, dt, fn) {
+    const r = rate * this.quality.particles;
+    this.emitAcc[key] = (this.emitAcc[key] ?? Math.random()) + r * dt;
+    while (this.emitAcc[key] >= 1) {
+      this.emitAcc[key] -= 1;
+      fn();
+    }
+  }
+
+  setMarker(pos) {
+    this.marker.visible = Boolean(pos);
+    if (pos) this.markerBase.set(pos.x, pos.y + heightAt(pos.x, pos.z), pos.z);
+  }
+
+  /** 互動對象腳下的光圈 */
+  setHighlight(id) {
+    const p = id ? this.facePoint(id) : null;
+    this.highlight.visible = Boolean(p);
+    if (p) {
+      const r = { altar: 1.6, stele: 2.6, kitchen: 1.2, storehouse: 1.3, screen: 1.0, jars: 1.8, well: 1.5, pond: 2.6 }[id] ?? 0.9;
+      this.highlight.scale.setScalar(r);
+      this.highlight.position.set(p.x, heightAt(p.x, p.z) + 0.06, p.z);
+    }
+  }
+
+  /** 點擊地面時的回饋光圈；blocked 為 true 時顯示紅色 */
+  showTap(point, blocked = false) {
+    this.tapRing.position.set(point.x, heightAt(point.x, point.z) + 0.06, point.z);
+    this.tapRing.material.color.setHex(blocked ? 0xd65f4c : 0xf2bd68);
+    this.tapRing.material.opacity = 1;
+    this.tapRing.scale.setScalar(1);
+    this.burst(blocked ? 'blocked' : 'tap', this.tapRing.position);
+  }
+
+  syncLanterns(litSpots, { quiet = false } = {}) {
+    this.lanterns.forEach((lantern, i) => {
+      const on = litSpots.includes(i);
+      if (on && !lantern.lit && !quiet) {
+        this.burst('lanternOn', this.lanternPosition(i));
+        this.burst(lantern.carving, this.lanternPosition(i).add(new Vector3(0, 0.5, 0)));
+      }
+      lantern.setLit(on);
+    });
+  }
+
+  /** 點錯的石燈：火光閃一下就被風吹熄 */
+  sputterLantern(spot) {
+    const lantern = this.lanterns[spot];
+    this.burst('smoke', this.lanternPosition(spot));
+    return this.tweens.add(0.6, (k) => lantern.sputter(k), (k) => k).then(() => lantern.sputter(1));
+  }
+
+  /** 금줄斷開；instant 時直接移除（讀檔用） */
+  async setRopeOpen(open, instant = false) {
+    if (this.ropeOpen === open) return;
+    this.ropeOpen = open;
+    this.colliders = buildColliders(this.level, { ropeOpen: open });
+    const rope = this.ropeGate.userData.rope;
+    if (!open) {
+      rope.visible = true;
+      rope.position.set(0, 0, 0);
+      rope.rotation.set(0, 0, 0);
+      return;
+    }
+    if (instant) {
+      rope.position.y = -0.85;
+      rope.rotation.x = -1.4;
+      return;
+    }
+    this.burst('correct', this.ropeGate.position.clone().add(new Vector3(0, 1.1, 0)), { count: 30 });
+    await this.tweens.add(0.9, (k) => {
+      rope.position.y = -0.85 * k;
+      rope.rotation.x = -1.4 * k;
+    }, ease.outBack);
+  }
+
+  openStorehouse(instant = false) {
+    const { door, lock, side, group } = this.storehouse;
+    lock.visible = false;
+    if (instant) {
+      door.rotation.y = side * 1.9;
+      return Promise.resolve();
+    }
+    this.burst('door', group.position.clone().add(new Vector3(door.position.x, 0.6, 0)));
+    return this.tweens.add(0.8, (k) => (door.rotation.y = side * k * 1.9));
+  }
+
+  /** 轉一次轆轤：水桶往上升一段 */
+  crankWell(cranks, total) {
+    const bucket = this.wellBucket;
+    const roller = this.well.children.find((c) => c.geometry?.type === 'CylinderGeometry' && Math.abs(c.rotation.z - Math.PI / 2) < 0.01);
+    const from = bucket.position.y;
+    const to = 0.98 + (cranks / total) * 0.75;
+    return this.tweens.add(0.5, (k) => {
+      bucket.position.y = from + (to - from) * k;
+      if (roller) roller.rotation.x += 0.2;
+    });
+  }
+
+  setGrandmaAwake(awake) {
+    this.grandmaAwake = awake;
+  }
+
+  /** 黑貓：前往下一個地點（帶一點跳躍與煙霧） */
+  async setCatStage(stage, instant = false) {
+    const prev = this.cat.root.position.clone();
+    this.catStage = stage;
+    if (instant) {
+      this.#placeCat(stage);
+      this.#updateCatInteractable();
+      return;
+    }
+    this.burst('smoke', prev.clone().add(new Vector3(0, 0.3, 0)), { count: 8, size: 0.3 });
+    await this.tweens.add(0.4, (k) => {
+      this.cat.root.position.y = prev.y + Math.sin(k * Math.PI) * 0.8;
+      this.cat.root.scale.setScalar(1 - k);
+    });
+    this.#placeCat(stage);
+    this.#updateCatInteractable();
+    await this.tweens.add(0.3, (k) => this.cat.root.scale.setScalar(Math.max(0.01, k)));
+  }
+
+  showOfferings(visible = true, { quiet = false } = {}) {
+    this.altar.offerings.visible = visible;
+    if (visible && !quiet) this.burst('correct', this.altarTop.clone().add(new Vector3(0, 0.4, 0)));
+  }
+
+  setDokkaebiVisible(visible) {
+    this.dokkaebi.root.visible = visible;
+    this.dokkaebi.root.scale.setScalar(1);
+  }
+
   async spawnDokkaebi() {
     const { root } = this.dokkaebi;
     root.visible = true;
     root.scale.setScalar(0.001);
-    // 鬼火先收攏、越轉越快，再「砰」地變出도깨비
-    await this.tweens.add(1.0, (k) => {
+    this.tweensBusyDok = true;
+    await this.tweens.add(1.2, (k) => {
       for (const w of this.wisps) w.userData.radius = (w.userData.baseRadius ??= w.userData.radius) * (1 - 0.8 * k);
-      this.wispSpeed = 0.6 + k * 4;
+      this.wispSpeed = 0.6 + k * 5;
     });
-    const center = this.dokBase.clone().setY(1.6);
+    const center = this.dokBase.clone().setY(this.dokBase.y + 1.6);
     this.burst('dokkaebi', center);
     this.burst('smoke', center, { count: 40, spread: 1.0, size: 0.7, color: 0x4a5a80 });
     this.wispSpeed = 0.6;
-    await this.tweens.add(0.7, (k) => root.scale.setScalar(Math.max(0.001, k)), ease.outBack);
+    // 翻個跟斗落地
+    await this.tweens.add(0.8, (k) => {
+      root.scale.setScalar(Math.max(0.001, Math.min(1, k * 1.4)));
+      root.rotation.x = (1 - k) * Math.PI * 2;
+      root.position.y = this.dokBase.y + Math.sin(k * Math.PI) * 1.5;
+    }, ease.linear);
+    root.rotation.x = 0;
+    this.tweensBusyDok = false;
     for (const w of this.wisps) w.userData.radius = w.userData.baseRadius * 1.3;
   }
 
-  /** 도깨비的反應動作：laugh（大笑）、surprised（吃驚）、cheer（揮棒歡呼） */
   dokkaebiReact(kind) {
-    const duration = { laugh: 1.4, surprised: 0.9, cheer: 1.6 }[kind] ?? 1;
+    const duration = { laugh: 1.4, surprised: 0.9, cheer: 1.6, pout: 1.0 }[kind] ?? 1;
     this.dokAction = { kind, t: 0, duration };
     const head = this.dokkaebiHead;
     if (kind === 'laugh') this.burst('wrong', head);
     if (kind === 'surprised') this.burst('correct', head);
-    if (kind === 'cheer') this.burst('correct', head, { count: 50, color: 0x7cc4ff });
-  }
-
-  async returnMoon() {
-    this.moon.visible = true;
-    await this.tweens.add(4.0, (k) => {
-      this.moon.position.lerpVectors(MOON_FROM, MOON_TO, k);
-      this.moonlight.intensity = 2.4 * k;
-      this.ambient.intensity = 2.0 + 1.3 * k;
-      this.scene.fog.density = 0.016 - 0.008 * k;
-      this.stars.brightness = 1 - 0.4 * k;
-      if (Math.random() < 0.5) this.burst('moon', new Vector3(0, 1, -12));
-    });
+    if (kind === 'cheer') this.burst('correct', head, { count: 50, color: 0x67c5dc });
   }
 
   async hideDokkaebi() {
     const { root } = this.dokkaebi;
+    this.tweensBusyDok = true;
     await this.tweens.add(0.7, (k) => {
       root.scale.setScalar(Math.max(0.001, 1 - k));
       root.rotation.y = k * Math.PI * 4;
     });
-    this.burst('smoke', this.dokBase.clone().setY(1.2), { count: 30, spread: 0.8, size: 0.6, color: 0x4a5a80 });
-    this.burst('dokkaebi', this.dokBase.clone().setY(1.2), { count: 40 });
+    const p = this.dokBase.clone().setY(this.dokBase.y + 1.2);
+    this.burst('smoke', p, { count: 30, spread: 0.8, size: 0.6, color: 0x4a5a80 });
+    this.burst('dokkaebi', p, { count: 40 });
     root.visible = false;
+    root.rotation.y = 0;
+    this.tweensBusyDok = false;
+  }
+
+  // ---------- 甕遊戲 ----------
+
+  showShellJars(visible) {
+    this.shellJars.forEach((jar, i) => {
+      jar.visible = visible;
+      jar.position.set(this.level.altar.x + (i - 1) * 0.7, this.altarTop.y, this.level.altar.z);
+    });
+    this.altar.offerings.visible = !visible && this.altar.offerings.visible;
+    this.jarAtSlot = [0, 1, 2];
+  }
+
+  /** 播放一回合：月光放進甕裡，再依序交換位置 */
+  async playShellRound(round, { glint = false } = {}) {
+    this.showShellJars(true);
+    const jar = this.shellJars[round.moonJar];
+    this.moonOrb.visible = true;
+    const start = jar.position.clone().add(new Vector3(0, 1.4, 0));
+    await this.tweens.add(0.7, (k) => this.moonOrb.position.copy(start).add(new Vector3(0, -k * 0.9, 0)));
+    this.moonOrb.visible = false;
+    await this.tweens.add(0.3, () => {});
+    const slotX = (slot) => this.level.altar.x + (slot - 1) * 0.7;
+    for (const [a, b] of round.swaps) {
+      const ja = this.shellJars[this.jarAtSlot[a]];
+      const jb = this.shellJars[this.jarAtSlot[b]];
+      const za = this.level.altar.z;
+      await this.tweens.add(round.swapDuration, (k) => {
+        ja.position.x = slotX(a) + (slotX(b) - slotX(a)) * k;
+        jb.position.x = slotX(b) + (slotX(a) - slotX(b)) * k;
+        ja.position.z = za + Math.sin(k * Math.PI) * 0.45;
+        jb.position.z = za - Math.sin(k * Math.PI) * 0.45;
+      });
+      [this.jarAtSlot[a], this.jarAtSlot[b]] = [this.jarAtSlot[b], this.jarAtSlot[a]];
+    }
+    if (glint) {
+      const slot = this.jarAtSlot.indexOf(round.moonJar);
+      this.burst('correct', this.shellJars[round.moonJar].position.clone().add(new Vector3(0, 0.7, 0)), { count: 12, color: 0xfff1c4 });
+      return slot;
+    }
+    return null;
+  }
+
+  /** 從被點到的物件找出是第幾個位置的甕 */
+  slotFromObject(obj) {
+    let o = obj;
+    while (o && !this.shellJars.includes(o)) o = o.parent;
+    if (!o) return null;
+    return this.jarAtSlot.indexOf(this.shellJars.indexOf(o));
+  }
+
+  async revealShell(slot, moonJar) {
+    const jar = this.shellJars[this.jarAtSlot[slot]];
+    const y = jar.position.y;
+    const right = this.jarAtSlot[slot] === moonJar;
+    await this.tweens.add(0.5, (k) => (jar.position.y = y + k * 0.6));
+    if (right) {
+      this.moonOrb.position.copy(jar.position).add(new Vector3(0, 0.2, 0));
+      this.moonOrb.visible = true;
+      this.burst('correct', this.moonOrb.position, { count: 40, color: 0xfff1c4 });
+    } else {
+      this.burst('smoke', jar.position.clone().add(new Vector3(0, 0.2, 0)), { count: 8, size: 0.3 });
+    }
+    await this.tweens.add(0.6, () => {});
+    if (!right) await this.tweens.add(0.3, (k) => (jar.position.y = y + 0.6 * (1 - k)));
+    return right;
+  }
+
+  // ---------- 結局 ----------
+
+  async returnMoon() {
+    this.moon.visible = true;
+    this.showShellJars(false);
+    const orbFrom = this.moonOrb.position.clone();
+    await this.tweens.add(4.5, (k) => {
+      this.moonOrb.position.lerpVectors(orbFrom, MOON_TO, Math.min(1, k * 1.5));
+      this.moonOrb.visible = k < 0.6;
+      this.moon.position.lerpVectors(MOON_FROM, MOON_TO, k);
+      this.moonlight.intensity = 2.6 * k;
+      this.ambient.intensity = 2.0 + 1.3 * k;
+      this.scene.fog.density = 0.017 - 0.008 * k;
+      this.stars.brightness = 1 - 0.4 * k;
+      this.pond.userData.water.material.uniforms.uMoon.value = k;
+      if (Math.random() < 0.5) this.burst('moon', new Vector3(0, 1, -12));
+    });
+  }
+
+  /** 月光照亮村子：每戶的窗一扇扇亮起來 */
+  async lightUpVillage() {
+    const windows = [...this.windowMeshes].sort((a, b) => a.getWorldPosition(new Vector3()).z - b.getWorldPosition(new Vector3()).z);
+    for (const w of windows) {
+      w.material = mats.paperGlow;
+      this.burst('lanternOn', w.getWorldPosition(new Vector3()), { count: 6 });
+      await this.tweens.add(0.12, () => {});
+    }
+  }
+
+  /** 真結局：도깨비在屋頂上點起藍色的火 */
+  trueEndingFires() {
+    for (const h of this.level.houses) {
+      const wisp = makeWisp(true);
+      wisp.position.set(h.x, heightAt(h.x, h.z) + 5.2, h.z);
+      wisp.userData = { phase: Math.random() * 6, radius: 0, height: wisp.position.y, fixed: true };
+      this.scene.add(wisp);
+      this.burst('dokkaebi', wisp.position, { count: 30 });
+    }
   }
 
   // ---------- 每幀更新 ----------
 
-  update(dt) {
+  update(dt, playerPos) {
     this.time += dt;
     const t = this.time;
     this.tweens.update(dt);
 
-    // 石燈：火光閃爍，點亮的石燈冒出火星
-    let i = 0;
-    for (const [season, lantern] of this.lanterns) {
-      lantern.flicker(t, i++ * 1.7);
+    this.lanterns.forEach((lantern, i) => {
+      lantern.flicker(t, i * 1.7);
       if (lantern.lit) {
-        this.#emitRate(`ember-${season}`, 5, dt, () =>
-          this.burst('spark', this.lanternPosition(season).setY(2.0), { speed: 0.3, up: 0.9, size: 0.09, life: 1.4 }),
-        );
+        this.#emitRate(`ember-${i}`, 4, dt, () => this.burst('spark', this.lanternPosition(i).setY(this.lanternPosition(i).y + 0.3), { speed: 0.3, up: 0.9, size: 0.09, life: 1.4 }));
       }
-    }
+    });
 
-    // 廚房炊煙
     this.#emitRate('chimney', 3, dt, () =>
       this.particles.emit({ x: this.chimneyTop.x, y: this.chimneyTop.y, z: this.chimneyTop.z, count: 1, spread: 0.15, speed: 0.35, up: 0.9, color: 0x5a5f6c, life: 3.8, gravity: -0.05, drag: 0.4, size: 0.5 }),
     );
 
-    // 老樹飄落的葉子
-    const { shrine, altar } = this.level;
+    const { shrineTree, altar } = this.level;
     this.#emitRate('leaves', 1.2, dt, () => {
       const a = Math.random() * Math.PI * 2;
       const r = Math.random() * 3;
-      this.particles.emit({ x: shrine.x + Math.cos(a) * r, y: 5 + Math.random() * 2, z: shrine.z + Math.sin(a) * r, count: 1, spread: 0, speed: 0.5, up: 0, color: Math.random() < 0.7 ? 0x4b8a4a : 0xd9873a, life: 6, gravity: 0.35, drag: 0.8, size: 0.14, jitter: 0.25 });
+      this.particles.emit({ x: shrineTree.x + Math.cos(a) * r, y: 6 + Math.random() * 2, z: shrineTree.z + Math.sin(a) * r, count: 1, spread: 0, speed: 0.5, up: 0, color: Math.random() < 0.7 ? 0x4b8a4a : 0xd9873a, life: 6, gravity: 0.35, drag: 0.8, size: 0.14, jitter: 0.25 });
     });
 
-    // 鬼火繞著老樹轉，拖出藍色殘影
+    // 地面薄霧：在玩家附近飄動
+    if (playerPos) {
+      this.#emitRate('mist', 2.2, dt, () => {
+        const a = Math.random() * Math.PI * 2;
+        const r = 4 + Math.random() * 10;
+        const x = playerPos.x + Math.cos(a) * r;
+        const z = playerPos.z + Math.sin(a) * r;
+        this.particles.emit({ x, y: heightAt(x, z) + 0.3, z, count: 1, spread: 0.5, speed: 0.25, up: 0.05, color: 0x263c50, life: 7, gravity: 0, drag: 0.2, size: 2.6, jitter: 0.3 });
+      });
+    }
+
+    // 할머니：睡著時點頭冒「Z」，醒著時揮手
+    const g = this.grandma;
+    if (this.grandmaAwake) {
+      g.head.rotation.x = Math.sin(t * 0.8) * 0.05;
+      g.arm.rotation.z = -1.2 + Math.sin(t * 4) * 0.4 * (Math.sin(t * 0.5) > 0.3 ? 1 : 0);
+      g.body.rotation.x = 0;
+    } else {
+      g.head.rotation.x = 0.45 + Math.sin(t * 1.2) * 0.08;
+      g.body.rotation.x = 0.12;
+      g.arm.rotation.z = 0;
+      this.#emitRate('sleep', 0.8, dt, () => this.burst('sleep', g.head.getWorldPosition(new Vector3()).add(new Vector3(0, 0.3, 0))));
+    }
+
+    // 黑貓：尾巴搖、轉頭
+    {
+      let seg = this.cat.tail;
+      let i = 0;
+      while (seg) {
+        seg.rotation.y = Math.sin(t * 2.4 - i * 0.6) * 0.35;
+        seg.rotation.x = -0.25;
+        seg = seg.children.find((c) => c.isGroup);
+        i++;
+      }
+      this.cat.head.rotation.y = Math.sin(t * 0.7) * 0.5;
+    }
+
+    // 腳印呼吸般地明暗
+    this.footprints.children.forEach((fp, i) => (fp.material.opacity = 0.45 + 0.4 * Math.max(0, Math.sin(t * 1.5 - i * 0.4))));
+
+    // 鬼火
     const speed = this.wispSpeed ?? 0.6;
     this.wispAngle = (this.wispAngle ?? 0) + dt * speed;
     for (const w of this.wisps) {
       const { phase, radius, height } = w.userData;
       const a = this.wispAngle + phase;
-      w.position.set(altar.x + Math.cos(a) * radius, height + Math.sin(t * 2 + phase) * 0.3, altar.z - 2 + Math.sin(a) * radius * 0.7);
+      w.position.set(altar.x + Math.cos(a) * radius, heightAt(altar.x, altar.z) + height + Math.sin(t * 2 + phase) * 0.3, altar.z - 2 + Math.sin(a) * radius * 0.7);
       this.#emitRate(`wisp-${phase}`, 8, dt, () =>
         this.particles.emit({ x: w.position.x, y: w.position.y, z: w.position.z, count: 1, spread: 0.08, speed: 0.15, up: 0.2, color: 0x4f9cff, life: 0.9, gravity: -0.1, drag: 1, size: 0.16 }),
       );
     }
 
-    // 樹木隨風搖擺、布條飄動
+    // 樹與布條隨風擺動
     const wind = Math.sin(t * 0.7) * 0.5 + 0.5;
+    const motion = this.reduceMotion ? 0.3 : 1;
     for (const tree of this.swayers) {
       const { phase, amp } = tree.userData.sway;
-      tree.rotation.x = Math.sin(t * 1.3 + phase) * amp * (0.6 + wind);
-      tree.rotation.z = Math.sin(t * 1.1 + phase * 1.7) * amp * (0.6 + wind);
+      tree.rotation.x = Math.sin(t * 1.3 + phase) * amp * (0.6 + wind) * motion;
+      tree.rotation.z = Math.sin(t * 1.1 + phase * 1.7) * amp * (0.6 + wind) * motion;
     }
     for (const strip of this.strips) {
-      strip.rotation.x = Math.sin(t * 3.1 + strip.userData.flutter) * (0.15 + wind * 0.25);
-      strip.rotation.z = Math.sin(t * 2.3 + strip.userData.flutter * 1.3) * 0.1;
+      strip.rotation.x = Math.sin(t * 3.1 + strip.userData.flutter) * (0.15 + wind * 0.25) * motion;
+      strip.rotation.z = Math.sin(t * 2.3 + strip.userData.flutter * 1.3) * 0.1 * motion;
     }
 
     if (this.marker.visible) {
       this.marker.position.copy(this.markerBase);
-      this.marker.position.y += Math.sin(t * 3) * 0.3;
+      this.marker.position.y += Math.sin(t * 3) * 0.3 * motion;
       this.marker.rotation.y = t * 2;
-      this.#emitRate('marker', 6, dt, () =>
-        this.particles.emit({ x: this.marker.position.x, y: this.marker.position.y, z: this.marker.position.z, count: 1, spread: 0.3, speed: 0.2, up: 0.6, color: 0xffd36e, life: 1, drag: 1, size: 0.1 }),
-      );
     }
+    if (this.highlight.visible) this.highlight.material.opacity = 0.45 + 0.35 * Math.sin(t * 4) * motion;
+    if (this.tapRing.material.opacity > 0) {
+      this.tapRing.material.opacity = Math.max(0, this.tapRing.material.opacity - dt * 1.8);
+      this.tapRing.scale.multiplyScalar(1 + dt * 1.5);
+    }
+    this.pond.userData.water.material.uniforms.uTime.value = t;
 
     this.#animateDokkaebi(dt, t);
     this.particles.update(dt);
@@ -553,17 +982,15 @@ export class World {
 
   #animateDokkaebi(dt, t) {
     const d = this.dokkaebi;
-    if (!d.root.visible) return;
-    // 待機：左右搖擺、上下跳、狼牙棒晃動
+    if (!d.root.visible || this.tweensBusyDok) return;
     let y = Math.abs(Math.sin(t * 3)) * 0.12;
     let z = 0;
     let headX = 0;
-    let headZ = Math.sin(t * 2.2) * 0.12;
+    const headZ = Math.sin(t * 2.2) * 0.12;
     let bodyZ = Math.sin(t * 1.5) * 0.06;
     let clubZ = -0.5;
     let clubX = Math.sin(t * 3) * 0.2;
     let scale = 1;
-
     const a = this.dokAction;
     if (a) {
       a.t += dt;
@@ -583,20 +1010,24 @@ export class World {
         clubZ = -0.5 - bell * 2.4;
         clubX = Math.sin(k * Math.PI * 4) * 0.6;
         headX = -0.3 * bell;
+      } else if (a.kind === 'pout') {
+        headX = 0.35 * bell;
+        bodyZ = 0.15 * bell;
       }
       if (k >= 1) this.dokAction = null;
     }
-
-    d.root.position.set(this.dokBase.x, y, this.dokBase.z + z);
+    d.root.position.set(this.dokBase.x, this.dokBase.y + y, this.dokBase.z + z);
     d.root.rotation.z = bodyZ;
     d.head.rotation.set(headX, 0, headZ);
     d.club.rotation.set(clubX, 0, clubZ);
-    if (scale !== 1) d.root.scale.setScalar(scale);
+    if (scale !== 1 || a) d.root.scale.setScalar(scale);
   }
 
   dispose() {
+    this.tweens.clear();
     this.scene.traverse((obj) => {
       obj.geometry?.dispose();
+      if (obj.material && !Object.values(mats).includes(obj.material)) obj.material.dispose?.();
     });
   }
 }

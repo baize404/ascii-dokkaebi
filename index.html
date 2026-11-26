@@ -3,9 +3,9 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="theme-color" content="#000000" />
+    <meta name="theme-color" content="#080d16" />
     <title>달 도둑 도깨비 · ASCII Dokkaebi</title>
-    <meta name="description" content="用 ASCII 字元渲染的 3D 探索解謎小遊戲：在沒有月亮的夜晚，找回被도깨비偷走的月亮。" />
+    <meta name="description" content="韓國民間傳說 × ASCII 藝術的 3D 探索解謎網頁遊戲：在沒有月亮的夜晚，找回被도깨비偷走的月亮。" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <script>
       // 主程式載入失敗（例如網站還在部署、網路中斷）時，顯示說明而不是一頁沒有樣式的文字
@@ -30,66 +30,82 @@
 
       <!-- 遊戲中 HUD -->
       <div id="hud" class="hud" hidden>
-        <section class="panel objectives" aria-label="任務">
-          <h2>任務</h2>
-          <ul id="objective-list"></ul>
-        </section>
-        <section class="panel inventory" aria-label="背包">
-          <h2>背包</h2>
-          <ul id="inventory-list"></ul>
-        </section>
-        <div class="toolbar">
-          <button id="btn-sound" type="button" title="音效開關（M）">♪</button>
-          <button id="btn-ascii" type="button" title="切換 ASCII／原始畫面（T）">ASCII</button>
-          <button id="btn-help" type="button" title="操作說明（H）">?</button>
+        <button id="objective" class="objective" type="button" aria-label="目前目標，點一下打開任務日誌">
+          <span class="chapter" id="objective-chapter"></span>
+          <span class="text" id="objective-text"></span>
+        </button>
+        <div class="hud-buttons">
+          <button id="btn-hint" type="button" title="提示（不會直接說出答案）">提示</button>
+          <button id="btn-inventory" type="button" title="背包（I）">背包<span class="badge" id="inventory-badge" hidden></span></button>
+          <button id="btn-map" type="button" title="地圖（M）">地圖</button>
+          <button id="btn-menu" type="button" title="選單（Esc）" aria-label="選單">☰</button>
         </div>
+        <canvas id="minimap" class="minimap" width="140" height="150" aria-label="小地圖，點一下放大"></canvas>
+        <div id="tip" class="tip" role="status" hidden></div>
         <button id="prompt" class="prompt" type="button" hidden></button>
+        <div id="joystick" class="joystick" hidden aria-hidden="true"><div class="knob"></div></div>
         <div id="toast" class="toast" role="status" aria-live="polite"></div>
+        <div id="fps" class="fps" hidden></div>
       </div>
 
-      <!-- 對話框：整個畫面都可以點一下繼續 -->
-      <div id="dialogue" class="dialogue-layer" hidden>
-        <div class="dialogue panel" role="dialog" aria-live="polite">
-          <div class="speaker" id="dialogue-speaker"></div>
-          <p class="text" id="dialogue-text"></p>
-          <div class="choices" id="dialogue-choices"></div>
-          <div class="hint" id="dialogue-hint">點一下或按 Space 繼續 ▸</div>
+      <!-- 過場：上下黑邊＋字幕 -->
+      <div id="letterbox" class="letterbox" hidden>
+        <div class="bar top"></div>
+        <div class="bar bottom">
+          <p id="caption" class="caption"></p>
+          <button id="btn-skip" type="button" class="skip">跳過 ▸▸</button>
         </div>
       </div>
 
-      <!-- 標題畫面 -->
-      <section id="screen-title" class="screen">
-        <div class="screen-inner">
-          <pre class="ascii-title" id="ascii-title" aria-label="도깨비"></pre>
-          <p class="subtitle">달 도둑 도깨비 ── 偷走月亮的도깨비</p>
-          <p class="story">今晚的山村沒有月亮。<br />提著燈籠的你，要找出是誰把月亮藏了起來。</p>
-          <div class="actions">
-            <button id="btn-start" type="button" class="primary">▶ 開始遊戲</button>
-            <button id="btn-title-help" type="button">操作說明</button>
+      <!-- 對話框 -->
+      <div id="dialogue" class="dialogue-layer" hidden>
+        <div class="dialogue" role="dialog" aria-live="polite">
+          <pre class="portrait" id="dialogue-portrait" aria-hidden="true"></pre>
+          <div class="body">
+            <div class="speaker" id="dialogue-speaker"></div>
+            <p class="text" id="dialogue-text"></p>
+            <div class="choices" id="dialogue-choices"></div>
+            <div class="dialogue-bar">
+              <button id="btn-history" type="button">歷史</button>
+              <span class="hint" id="dialogue-hint">點一下繼續 ▸</span>
+            </div>
           </div>
-          <p class="credit">ASCII 3D renderer · Three.js · 原創作品</p>
+        </div>
+      </div>
+      <div id="glossary-pop" class="glossary-pop" role="tooltip" hidden></div>
+
+      <!-- 標題畫面（主選單） -->
+      <section id="screen-title" class="screen title-screen">
+        <div class="title-inner">
+          <pre class="ascii-title" id="ascii-title" aria-label="도깨비"></pre>
+          <p class="subtitle">달 도둑 도깨비<span>偷走月亮的鬼怪</span></p>
+          <nav class="menu" aria-label="主選單">
+            <button id="btn-continue" type="button" hidden>繼續旅程<small id="continue-info"></small></button>
+            <button id="btn-new" type="button" class="primary">新的旅程</button>
+            <button id="btn-settings-title" type="button">設定</button>
+            <button id="btn-help-title" type="button">操作說明</button>
+            <button id="btn-codex-title" type="button">民俗圖鑑</button>
+            <button id="btn-achievements-title" type="button">成就</button>
+          </nav>
+          <p class="credit">韓國民間傳說 × ASCII 藝術 × 3D 探索 · 原創作品</p>
         </div>
       </section>
 
-      <!-- 操作說明 -->
-      <section id="screen-help" class="screen" hidden>
-        <div class="screen-inner panel">
-          <h2>操作說明</h2>
-          <dl class="controls">
-            <dt>移動</dt><dd>WASD／方向鍵，或點擊地面</dd>
-            <dt>互動</dt><dd>E／Space，或直接點物件、按「互動」按鈕</dd>
-            <dt>對話</dt><dd>點一下畫面或按 Space 繼續；選項可按數字鍵 1–3</dd>
-            <dt>畫面</dt><dd>T 切換 ASCII 與原始 3D 畫面</dd>
-            <dt>音效</dt><dd>M 或右上角 ♪ 開關</dd>
-          </dl>
-          <p class="tip">提示：先到村口找장승（守護柱）問問看。黃色的光點會標出下一個重要地點。</p>
-          <div class="actions"><button id="btn-help-close" type="button" class="primary">知道了</button></div>
+      <!-- 通用面板：日誌、背包、地圖、設定、說明、圖鑑、成就、暫停、對話歷史 -->
+      <section id="panel" class="panel-layer" hidden>
+        <div class="panel-box" role="dialog" aria-modal="true" aria-labelledby="panel-title">
+          <header>
+            <h2 id="panel-title"></h2>
+            <nav id="panel-tabs" class="tabs"></nav>
+            <button id="panel-close" type="button" class="close" aria-label="關閉">✕</button>
+          </header>
+          <div id="panel-body" class="panel-body"></div>
         </div>
       </section>
 
       <!-- 結局 -->
       <section id="screen-end" class="screen" hidden>
-        <div class="screen-inner panel">
+        <div class="end-inner">
           <pre class="ascii-moon" aria-hidden="true">
       .-""""-.
     .'        '.
@@ -98,23 +114,28 @@
    \    '--'    /
     '.        .'
       '-....-'</pre>
-          <h2>月亮回來了</h2>
-          <p>도깨비心滿意足地抱著메밀묵消失在老樹後面。<br />山村又被月光照亮了。</p>
+          <p class="ending-label" id="end-label"></p>
+          <h2 id="end-title"></h2>
+          <p id="end-text"></p>
           <dl class="stats" id="end-stats"></dl>
-          <div class="actions"><button id="btn-restart" type="button" class="primary">↻ 再玩一次</button></div>
+          <ul class="new-achievements" id="end-achievements"></ul>
+          <div class="actions">
+            <button id="btn-restart" type="button" class="primary">↻ 再玩一次</button>
+            <button id="btn-to-title" type="button">回到標題</button>
+          </div>
         </div>
       </section>
-    </div>
 
-    <!-- 載入失敗時的說明（不依賴外部 CSS，才能在樣式也載不到時正常顯示） -->
-    <div
-      id="boot-error"
-      hidden
-      style="position: fixed; inset: 0; z-index: 100; align-items: center; justify-content: center; padding: 24px; background: #000; color: #cfe3ff; font-family: monospace; text-align: center; line-height: 1.8"
-    >
-      <div>
-        <p style="color: #ffc46e; font-size: 1.15rem; margin: 0 0 0.6em">遊戲載入失敗</p>
-        <p id="boot-error-detail" style="margin: 0">遊戲程式沒有成功載入。請重新整理頁面；如果還是不行，網站可能正在更新，請稍後再試。</p>
+      <!-- 載入失敗時的說明（不依賴外部 CSS，才能在樣式也載不到時正常顯示） -->
+      <div
+        id="boot-error"
+        hidden
+        style="position: fixed; inset: 0; z-index: 100; align-items: center; justify-content: center; padding: 24px; background: #080d16; color: #e2e8ef; font-family: monospace; text-align: center; line-height: 1.8"
+      >
+        <div>
+          <p style="color: #f2bd68; font-size: 1.15rem; margin: 0 0 0.6em">遊戲載入失敗</p>
+          <p id="boot-error-detail" style="margin: 0">遊戲程式沒有成功載入。請重新整理頁面；如果還是不行，網站可能正在更新，請稍後再試。</p>
+        </div>
       </div>
     </div>
     <script type="module" src="/src/main.js"></script>

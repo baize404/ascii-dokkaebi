@@ -1,0 +1,405 @@
+import { Raycaster, Vector2, Vector3 } from 'three';
+import { CODEX } from '../data/codex.js';
+import { heightAt, LEVEL } from '../data/level.js';
+import { CHAPTERS, CLUES, ENDINGS, ITEMS, TUTORIAL } from '../data/story.js';
+import { ExploredGrid } from '../ui/Minimap.js';
+import { World } from '../world/World.js';
+import { NavGrid } from './Pathfinding.js';
+import { Player } from './Player.js';
+import { playMoonReturn, playOpening } from './scenes/cinematics.js';
+import { lanternScene, ropeScene } from './scenes/lanterns.js';
+import { altarScene } from './scenes/shrine.js';
+import { villageScenes } from './scenes/village.js';
+
+const AUTOSAVE_SECONDS = 15;
+const STELE_MARKER = { x: 0, y: 4.3, z: 19.5 };
+
+/**
+ * 一次遊玩（從開始到結局）：持有 GameState、World、Player 與尋路網格，
+ * 負責互動分派、區域觸發、新手教學、存檔與地圖迷霧。
+ * 重新開始時整個 Session 會被丟掉並 dispose，不會殘留狀態。
+ */
+export class Session {
+  constructor(game, { state, player = null, extra = {} }) {
+    this.game = game;
+    this.state = state;
+    this.world = new World(LEVEL, state.lanternLayout);
+    this.nav = new NavGrid(LEVEL.bounds, this.world.colliders);
+    const start = player ?? LEVEL.playerStart;
+    this.player = new Player(this.world, start, this.nav);
+    if (player) this.player.setPosition(player.x, player.z, player.yaw);
+    this.player.onStep = (surface) => game.audio.sfx.step(surface);
+    this.explored = new ExploredGrid(extra.explored);
+    this.tutorial = new Set(Array.isArray(extra.tutorial) ? extra.tutorial : []);
+    this.busy = false;
+    this.nearest = null;
+    this.shellPickable = false;
+    this.autosaveTimer = 0;
+    this.mapTimer = 0;
+    this.movedDistance = 0;
+    this.lastPos = this.player.position.clone();
+    this.knownClues = new Set(state.clues);
+    this.knownCodex = new Set(state.codexUnlocked());
+    this.raycaster = new Raycaster();
+    this.disposed = false;
+    this.#applyState();
+    game.rig.occluders = [...this.world.houseGroups.values(), this.world.storehouse.group, ...this.world.swayers, this.world.shrineTree];
+  }
+
+  /** 讀檔後把場景同步成存檔的樣子 */
+  #applyState() {
+    const { state: s, world: w } = this;
+    w.syncLanterns(s.litSpots(), { quiet: true });
+    if (s.flags.ropeOpen) {
+      w.setRopeOpen(true, true);
+      this.rebuildNav();
+    }
+    if (s.flags.storehouseOpen) w.openStorehouse(true);
+    if (s.flags.grandmaAwake) w.setGrandmaAwake(true);
+    w.setCatStage(s.flags.catStage, true);
+    if (s.flags.offered && !s.flags.finished) {
+      w.showOfferings(true, { quiet: true });
+      w.setDokkaebiVisible(true);
+    }
+  }
+
+  rebuildNav() {
+    this.nav.rebuild(this.world.colliders);
+  }
+
+  get scene() {
+    return this.world.scene;
+  }
+
+  /** 給劇情腳本使用的工具 */
+  #context() {
+    const g = this.game;
+    return {
+      state: this.state,
+      world: this.world,
+      player: this.player,
+      level: LEVEL,
+      rig: g.rig,
+      hud: g.hud,
+      audio: g.audio,
+      cutscene: g.cutscene,
+      session: this,
+      say: (lines) => g.dialogue.say(lines),
+      choose: (line, choices, opts) => g.dialogue.choose(line, choices, opts),
+      sfx: (name, opts) => g.audio.sfx.play(name, opts),
+      wait: (ms) => new Promise((r) => setTimeout(r, ms)),
+      gotItem: (id) => this.gotItem(id),
+    };
+  }
+
+  // ---------- 開始與結局 ----------
+
+  async begin({ fromSave }) {
+    const g = this.game;
+    if (!fromSave) {
+      g.setMode('cutscene');
+      await playOpening(this.#context());
+      if (this.disposed) return;
+    }
+    g.rig.follow(this.player.position, true);
+    g.setMode('playing');
+    this.refreshHud();
+    if (fromSave) g.hud.toast(`繼續旅程：${CHAPTERS[this.state.chapter]}`);
+    this.#updateTutorial();
+    this.save();
+  }
+
+  async playEnding(ending) {
+    const g = this.game;
+    g.setMode('cutscene');
+    await playMoonReturn(this.#context(), ending);
+    this.save();
+    g.finishGame(this, ENDINGS[ending]);
+  }
+
+  // ---------- 每幀 ----------
+
+  update(dt, move, playing) {
+    const p = this.player.position;
+    this.world.update(dt, p);
+    this.player.update(dt, playing && !this.busy ? move : null);
+    if (!playing) return;
+    this.state.stats.playSeconds += dt;
+
+    // 走動距離（教學用）與迷霧
+    this.movedDistance += Math.hypot(p.x - this.lastPos.x, p.z - this.lastPos.z);
+    this.lastPos.copy(p);
+    this.mapTimer -= dt;
+    if (this.mapTimer <= 0) {
+      this.mapTimer = 0.25;
+      this.explored.reveal(p.x, p.z);
+      this.game.minimap.render(this.game.minimapCanvas, this.mapData());
+      this.#checkTriggers();
+      this.#updateTutorial();
+    }
+    this.game.audio.ambience.setListener(p.x, p.z);
+
+    if (!this.busy) {
+      this.nearest = this.#nearestInteractable();
+      this.game.hud.setPrompt(this.nearest && !this.game.dialogue.isOpen ? this.nearest.label : '');
+      this.world.setHighlight(this.nearest?.id ?? null);
+    }
+
+    this.autosaveTimer += dt;
+    if (this.autosaveTimer > AUTOSAVE_SECONDS) this.save();
+  }
+
+  #nearestInteractable() {
+    const p = this.player.position;
+    let best = null;
+    let bestDist = Infinity;
+    for (const it of this.world.activeInteractables()) {
+      if (it.id === 'cat' && this.state.flags.catStage >= 3) continue;
+      const d = Math.hypot(it.x - p.x, it.z - p.z);
+      if (d <= it.radius && d < bestDist) {
+        best = it;
+        bestDist = d;
+      }
+    }
+    return best;
+  }
+
+  /** 區域觸發：發現地標、走上山丘、靠近금줄 */
+  #checkTriggers() {
+    const p = this.player.position;
+    const { state, game } = this;
+    for (const l of LEVEL.landmarks) {
+      if (Math.hypot(l.x - p.x, l.z - p.z) < l.r && state.discoverLandmark(l.id)) {
+        game.hud.toast(`發現地點：${l.name}`);
+        game.audio.sfx.play('page');
+      }
+    }
+    const m = LEVEL.mound;
+    if (Math.hypot(p.x - m.x, p.z - m.z) < m.top + 1 && state.enterShrine()) this.#afterChange();
+    const rope = LEVEL.rope;
+    if (!state.flags.ropeOpen && Math.hypot(p.x - rope.x, p.z - rope.z) < 2.6 && !state.clues.has('rope')) {
+      state.inspectRope();
+      game.hud.tip('山丘入口被一條금줄攔住了', 4000);
+      this.#afterChange();
+    }
+  }
+
+  // ---------- 新手教學 ----------
+
+  #updateTutorial() {
+    const { hud, touch } = this.game;
+    const key = touch ? 'touch' : 'desktop';
+    const done = (id) => this.tutorial.has(id);
+    if (this.game.mode !== 'playing') return;
+    if (!done('move')) {
+      if (this.movedDistance > 3) {
+        this.tutorial.add('move');
+        hud.tip('');
+      } else if (hud.tipEl.hidden) hud.tip(TUTORIAL.move[key]);
+      return;
+    }
+    if (!done('interact')) {
+      this.world.setMarker(this.state.flags.readStele ? null : STELE_MARKER);
+      if (this.state.flags.readStele) {
+        this.tutorial.add('interact');
+        hud.tip(TUTORIAL.journal[key], 7000);
+        this.world.setMarker(null);
+      } else if (hud.tipEl.hidden) hud.tip(TUTORIAL.interact[key]);
+    }
+  }
+
+  // ---------- 互動 ----------
+
+  tryInteract(id = this.nearest?.id) {
+    const g = this.game;
+    if (!id || this.busy || g.mode !== 'playing' || g.dialogue.isOpen || g.panels.isOpen) return;
+    this.#run(id);
+  }
+
+  async #run(id) {
+    const g = this.game;
+    this.busy = true;
+    this.player.stop();
+    this.player.faceTowards(this.world.facePoint(id));
+    g.input.clear();
+    g.hud.setPrompt('');
+    g.hud.tip('');
+    this.world.setHighlight(null);
+    g.rig.setFocus(true);
+    this.state.stats.interactions++;
+    try {
+      await this.#dispatch(id);
+    } catch (err) {
+      console.error('互動發生錯誤：', err);
+    } finally {
+      this.busy = false;
+      g.rig.setFocus(false);
+      if (g.mode === 'playing' && !this.disposed) {
+        g.rig.follow(this.player.position);
+        g.audio.music.setMood('night');
+        this.#afterChange();
+      }
+    }
+  }
+
+  #dispatch(id) {
+    const ctx = this.#context();
+    if (id.startsWith('lantern-')) return lanternScene(ctx, Number(id.slice('lantern-'.length)));
+    if (id === 'rope') return ropeScene(ctx);
+    if (id === 'altar') return altarScene(ctx);
+    return villageScenes[id]?.(ctx);
+  }
+
+  /** 狀態改變後：通知新線索與圖鑑、更新 HUD、檢查成就、存檔 */
+  #afterChange() {
+    const { state, game } = this;
+    const newClues = [...state.clues].filter((id) => !this.knownClues.has(id));
+    newClues.forEach((id) => this.knownClues.add(id));
+    if (newClues.length) game.hud.toast(`新線索：${CLUES[newClues[0]].title}${newClues.length > 1 ? ` 等 ${newClues.length} 條` : ''}（記在任務日誌）`);
+    for (const id of state.codexUnlocked()) {
+      if (this.knownCodex.has(id)) continue;
+      this.knownCodex.add(id);
+      game.unlockCodex(id, CODEX.find((c) => c.id === id).title);
+    }
+    game.checkAchievements(state.summary());
+    this.refreshHud();
+    this.save();
+  }
+
+  gotItem(id) {
+    const g = this.game;
+    const item = ITEMS[id];
+    this.player.play('pickup');
+    this.world.burst('item', this.player.position.clone().setY(this.player.position.y + 1));
+    g.audio.sfx.play('item');
+    g.hud.toast(`取得：${item.name}（${item.note}）`, item.icon);
+    g.hud.setInventoryBadge(true);
+    if (!this.tutorial.has('inventory')) {
+      this.tutorial.add('inventory');
+      g.hud.tip(TUTORIAL.inventory[g.touch ? 'touch' : 'desktop'], 6000);
+    }
+  }
+
+  /** 從背包「調查」道具 */
+  async inspectItem(id) {
+    if (this.busy) return;
+    this.busy = true;
+    const item = ITEMS[id];
+    await this.game.dialogue.say([{ speaker: 'narrator', text: `${item.name}（${item.note}）：${item.desc}` }]);
+    this.busy = false;
+  }
+
+  /** 從背包「使用」道具：對著附近的互動對象使用，沒有適合的對象就提示 */
+  useItem(id) {
+    const near = this.#nearestInteractable();
+    const uses = {
+      gourd: ['storehouse'],
+      key: ['storehouse'],
+      tornHat: ['grandma'],
+      needle: ['grandma'],
+      muk: ['altar'],
+      makgeolli: ['altar'],
+      hat: ['altar'],
+    };
+    if (near && uses[id]?.includes(near.id)) {
+      this.tryInteract(near.id);
+      return true;
+    }
+    this.game.hud.toast(`這裡用不到「${ITEMS[id].name}」`);
+    this.game.audio.sfx.play('blocked');
+    return false;
+  }
+
+  combine(a, b) {
+    const recipe = this.state.combine(a, b);
+    if (recipe) {
+      this.game.audio.sfx.play('combine');
+      this.game.hud.toast(recipe.text, ITEMS[recipe.output].icon);
+      this.#afterChange();
+    } else {
+      this.game.hud.toast('這兩樣東西沒辦法組合');
+      this.game.audio.sfx.play('blocked');
+    }
+    return recipe;
+  }
+
+  useHint() {
+    const h = this.state.useHint();
+    this.save();
+    return h;
+  }
+
+  /** 點擊畫面：點到甕（甕遊戲中）、互動物件或地面 */
+  onTap({ x, y }) {
+    const g = this.game;
+    const ndc = new Vector2((x / window.innerWidth) * 2 - 1, -(y / window.innerHeight) * 2 + 1);
+    this.raycaster.setFromCamera(ndc, g.camera);
+    if (this.shellPickable && g.dialogue.externalPick) {
+      const hit = this.raycaster.intersectObjects(this.world.shellJars, true)[0];
+      const slot = hit ? this.world.slotFromObject(hit.object) : null;
+      if (slot !== null) g.dialogue.externalPick(slot);
+      return;
+    }
+    if (g.mode !== 'playing' || this.busy || g.dialogue.isOpen) return;
+    const hit = this.raycaster.intersectObjects(this.world.pickables, true)[0];
+    if (!hit) return;
+    let obj = hit.object;
+    while (obj && !obj.userData.interactId) obj = obj.parent;
+    const id = obj?.userData.interactId;
+    const it = id ? this.world.interactable(id) : null;
+    if (it && !(id === 'cat' && this.state.flags.catStage >= 3)) {
+      const res = this.player.walkTo(it.position, () => this.tryInteract(id), Math.min(0.9, it.radius * 0.6));
+      if (!res.ok) this.#blocked(hit.point);
+      else this.world.showTap(it.position);
+      return;
+    }
+    const res = this.player.walkTo(hit.point);
+    if (!res.ok) this.#blocked(hit.point);
+    else this.world.showTap(res.reached ? hit.point : this.player.target ?? hit.point, false);
+  }
+
+  #blocked(point) {
+    this.world.showTap(point, true);
+    this.game.audio.sfx.play('blocked');
+    this.game.hud.toast('那裡走不過去');
+  }
+
+  // ---------- HUD、地圖、存檔 ----------
+
+  refreshHud() {
+    const cur = this.state.currentObjective();
+    const text = !cur ? '' : cur.current ? `${cur.text}：${cur.current.text}` : `${cur.text}${cur.progress ? `（${cur.progress}）` : ''}`;
+    this.game.hud.setObjective(CHAPTERS[this.state.chapter], text);
+  }
+
+  /** 地圖資料：玩家、迷霧、已發現地標、已知的任務地點（只標玩家已經知道的） */
+  mapData() {
+    const s = this.state;
+    const f = s.flags;
+    const markers = [];
+    const add = (x, z) => markers.push({ x, z });
+    if (!f.readStele) add(0, 19.5);
+    if (s.clues.has('note')) {
+      if (!f.mukTaken) add(LEVEL.jars.x, LEVEL.jars.z);
+      if (!f.keyTaken && !f.storehouseOpen) add(LEVEL.well.x, LEVEL.well.z);
+      if (!f.makgeolliTaken) add(LEVEL.storehouse.x, LEVEL.storehouse.z);
+    }
+    if (f.readStele && !f.ropeOpen) add(0, -6.5);
+    if (f.ropeOpen && !f.shellWon) add(LEVEL.altar.x, LEVEL.altar.z);
+    return { player: { x: this.player.position.x, z: this.player.position.z, yaw: this.player.yaw }, explored: this.explored.cells, landmarks: s.landmarks, markers };
+  }
+
+  save() {
+    this.autosaveTimer = 0;
+    if (this.disposed) return;
+    const p = this.player.position;
+    this.game.saves.save(this.state, { x: p.x, z: p.z, yaw: this.player.yaw }, { explored: this.explored.save(), tutorial: [...this.tutorial] });
+  }
+
+  dispose() {
+    this.disposed = true;
+    this.world.dispose();
+  }
+}
+
+export { heightAt, Vector3 };

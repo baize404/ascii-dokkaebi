@@ -137,3 +137,67 @@ export function makeDokkaebiModel() {
 
   return { root, head, club };
 }
+
+/** 할머니：坐在마루上打盹的老奶奶。醒來後會站起來揮手。正面朝 +z。 */
+export function makeGrandmaModel() {
+  const root = new Group();
+  const body = new Group();
+  root.add(body);
+  const robe = new MeshLambertMaterial({ color: 0xc9c2b0 });
+  const skirt = new MeshLambertMaterial({ color: 0x5a6a80 });
+  const white = new MeshLambertMaterial({ color: 0xe2e8ef });
+  body.add(at(new Mesh(new ConeGeometry(0.5, 0.8, 10), skirt), 0, 0.4, 0));
+  body.add(at(new Mesh(new CylinderGeometry(0.22, 0.3, 0.45, 10), robe), 0, 0.98, 0));
+  const head = new Group();
+  head.position.set(0, 1.35, 0.04);
+  head.add(new Mesh(new SphereGeometry(0.24, 12, 10), mats.skin));
+  head.add(at(new Mesh(new SphereGeometry(0.25, 10, 8, 0, Math.PI * 2, 0, Math.PI * 0.5), white), 0, 0.03, -0.02));
+  head.add(at(new Mesh(new SphereGeometry(0.11, 8, 6), white), 0, 0.02, -0.27)); // 髮髻
+  head.add(at(new Mesh(new CylinderGeometry(0.015, 0.015, 0.34, 4), new MeshLambertMaterial({ color: 0xd9b24a })), 0, 0.02, -0.27)).rotation.z = Math.PI / 2;
+  for (const sx of [-1, 1]) head.add(at(new Mesh(new SphereGeometry(0.03, 5, 4), mats.black), sx * 0.08, 0.02, 0.22));
+  body.add(head);
+  const arm = new Group();
+  arm.position.set(0.26, 1.15, 0);
+  const armGeom = new CylinderGeometry(0.06, 0.07, 0.42, 6);
+  armGeom.translate(0, -0.21, 0);
+  arm.add(new Mesh(armGeom, robe));
+  arm.add(at(new Mesh(new SphereGeometry(0.06, 6, 5), mats.skin), 0, -0.44, 0));
+  body.add(arm);
+  return { root, body, head, arm };
+}
+
+/** 黑貓：尾巴會搖、眼睛會發光，嘴裡可以叼著감투。正面朝 +z。 */
+export function makeCatModel() {
+  const root = new Group();
+  const fur = new MeshLambertMaterial({ color: 0x1a1a22 });
+  const body = new Mesh(new SphereGeometry(0.22, 10, 8), fur);
+  body.scale.set(0.9, 0.85, 1.4);
+  root.add(at(body, 0, 0.24, 0));
+  const head = new Group();
+  head.position.set(0, 0.42, 0.28);
+  head.add(new Mesh(new SphereGeometry(0.15, 10, 8), fur));
+  for (const sx of [-1, 1]) {
+    const ear = new Mesh(new ConeGeometry(0.06, 0.12, 4), fur);
+    head.add(at(ear, sx * 0.08, 0.14, 0));
+    head.add(at(new Mesh(new SphereGeometry(0.03, 6, 4), new MeshBasicMaterial({ color: 0xf2bd68 })), sx * 0.06, 0.03, 0.13));
+  }
+  const hat = new Group();
+  const hatMat = new MeshLambertMaterial({ color: 0x0c0c10 });
+  hat.add(at(new Mesh(new CylinderGeometry(0.1, 0.12, 0.08, 10), hatMat), 0, 0.04, 0));
+  hat.add(at(new Mesh(new SphereGeometry(0.08, 8, 6, 0, Math.PI * 2, 0, Math.PI / 2), hatMat), 0, 0.08, 0));
+  hat.position.set(0, -0.08, 0.16);
+  head.add(hat);
+  root.add(head);
+  const tail = new Group();
+  tail.position.set(0, 0.3, -0.3);
+  let parent = tail;
+  for (let i = 0; i < 4; i++) {
+    const seg = new Group();
+    seg.position.set(0, 0, i === 0 ? 0 : -0.1);
+    seg.add(at(new Mesh(new SphereGeometry(0.045, 6, 4), fur), 0, 0, -0.05));
+    parent.add(seg);
+    parent = seg;
+  }
+  root.add(tail);
+  return { root, head, tail, hat };
+}

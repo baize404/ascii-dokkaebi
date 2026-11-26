@@ -8,72 +8,111 @@ const MOVE_KEYS = {
   KeyD: [1, 0],
   ArrowRight: [1, 0],
 };
-const ACTION_KEYS = new Set(['KeyE', 'Space', 'Enter']);
+const KEY_EVENTS = {
+  KeyE: 'input:action',
+  Space: 'input:action',
+  Enter: 'input:action',
+  KeyT: 'input:toggleAscii',
+  KeyH: 'input:help',
+  KeyJ: 'input:journal',
+  KeyI: 'input:inventory',
+  KeyM: 'input:map',
+  Escape: 'input:escape',
+  KeyP: 'input:escape',
+};
 const TAP_SLOP_PX = 12;
 
 /**
- * 鍵盤與指標輸入。只負責「讀取輸入」並透過 EventBus 發出事件，
- * 不知道遊戲規則。
- *
- * 事件：input:action、input:tap {x, y}、input:toggleAscii、input:help
+ * 輸入：鍵盤、滑鼠／觸控點擊、虛擬搖桿、滾輪與雙指縮放。
+ * 只負責「讀取輸入」並透過 EventBus 發出事件，不知道遊戲規則。
  */
 export class Input {
   constructor({ canvas, bus }) {
     this.bus = bus;
     this.pressed = new Set();
+    this.joy = { x: 0, y: 0 };
 
     window.addEventListener('keydown', (e) => this.#onKeyDown(e));
     window.addEventListener('keyup', (e) => this.pressed.delete(e.code));
-    window.addEventListener('blur', () => this.pressed.clear());
+    window.addEventListener('blur', () => this.clear());
 
-    let down = null;
+    // 點擊／輕觸（只有畫布上的點擊才算，介面上的不算）
+    const pointers = new Map();
+    let pinchStart = null;
     canvas.addEventListener('pointerdown', (e) => {
-      down = { x: e.clientX, y: e.clientY };
-    });
-    canvas.addEventListener('pointerup', (e) => {
-      if (!down) return;
-      const dx = e.clientX - down.x;
-      const dy = e.clientY - down.y;
-      if (dx * dx + dy * dy <= TAP_SLOP_PX * TAP_SLOP_PX) {
-        bus.emit('input:tap', { x: e.clientX, y: e.clientY });
+      pointers.set(e.pointerId, { x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY });
+      if (pointers.size === 2) {
+        const [a, b] = [...pointers.values()];
+        pinchStart = Math.hypot(a.x - b.x, a.y - b.y);
       }
-      down = null;
     });
+    canvas.addEventListener('pointermove', (e) => {
+      const p = pointers.get(e.pointerId);
+      if (!p) return;
+      p.x = e.clientX;
+      p.y = e.clientY;
+      if (pointers.size === 2 && pinchStart) {
+        const [a, b] = [...pointers.values()];
+        const d = Math.hypot(a.x - b.x, a.y - b.y);
+        bus.emit('input:zoom', (pinchStart - d) * 0.004);
+        pinchStart = d;
+      }
+    });
+    const up = (e) => {
+      const p = pointers.get(e.pointerId);
+      pointers.delete(e.pointerId);
+      if (pointers.size < 2) pinchStart = null;
+      if (!p || pointers.size > 0) return;
+      const dx = e.clientX - p.sx;
+      const dy = e.clientY - p.sy;
+      if (dx * dx + dy * dy <= TAP_SLOP_PX * TAP_SLOP_PX) bus.emit('input:tap', { x: e.clientX, y: e.clientY });
+    };
+    canvas.addEventListener('pointerup', up);
+    canvas.addEventListener('pointercancel', (e) => pointers.delete(e.pointerId));
+    canvas.addEventListener(
+      'wheel',
+      (e) => {
+        e.preventDefault();
+        bus.emit('input:zoom', Math.sign(e.deltaY) * 0.08);
+      },
+      { passive: false },
+    );
   }
 
   #onKeyDown(e) {
-    if (e.target instanceof HTMLElement && e.target.closest('button') && e.code !== 'KeyT') {
-      // 焦點在按鈕上時，讓瀏覽器自己處理 Enter／Space（觸發按鈕）
-      if (e.code === 'Enter' || e.code === 'Space') return;
-    }
+    const inField = e.target instanceof HTMLElement && e.target.closest('input, textarea, select');
+    if (inField) return;
+    const onButton = e.target instanceof HTMLElement && e.target.closest('button');
     if (MOVE_KEYS[e.code]) {
+      if (onButton && e.code.startsWith('Arrow')) return;
       e.preventDefault();
       this.pressed.add(e.code);
       return;
     }
     if (e.repeat) return;
-    if (ACTION_KEYS.has(e.code)) {
-      e.preventDefault();
-      this.bus.emit('input:action');
-    } else if (e.code === 'KeyT') {
-      this.bus.emit('input:toggleAscii');
-    } else if (e.code === 'KeyH') {
-      this.bus.emit('input:help');
-    } else if (e.code === 'KeyM') {
-      this.bus.emit('input:toggleSound');
+    // 焦點在按鈕上時，讓瀏覽器自己處理 Enter／Space（觸發按鈕）
+    if (onButton && (e.code === 'Enter' || e.code === 'Space')) return;
+    const event = KEY_EVENTS[e.code];
+    if (event) {
+      if (e.code === 'Space') e.preventDefault();
+      this.bus.emit(event);
     }
   }
 
-  /** 鍵盤移動意圖，x 為左右、y 為前後，已正規化。 */
+  setJoystick(v) {
+    this.joy = v;
+  }
+
+  /** 移動意圖（鍵盤＋搖桿），x 左右、y 前後，長度 0–1 */
   moveVector() {
-    let x = 0;
-    let y = 0;
+    let x = this.joy.x;
+    let y = this.joy.y;
     for (const code of this.pressed) {
       x += MOVE_KEYS[code][0];
       y += MOVE_KEYS[code][1];
     }
     const len = Math.hypot(x, y);
-    return len > 0 ? { x: x / len, y: y / len } : { x: 0, y: 0 };
+    return len > 1 ? { x: x / len, y: y / len } : { x, y };
   }
 
   clear() {

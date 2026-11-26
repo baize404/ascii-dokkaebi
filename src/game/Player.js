@@ -1,4 +1,5 @@
 import { Vector3 } from 'three';
+import { heightAt, LEVEL } from '../data/level.js';
 import { clampToBounds, resolveCircle } from '../world/Collision.js';
 import { makePlayerModel } from '../world/characters.js';
 
@@ -13,15 +14,31 @@ const ACTIONS = { pickup: 0.8, interact: 0.6, startle: 0.6, cheer: 1.6 };
 const wrapAngle = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 const lerp = (a, b, k) => a + (b - a) * k;
 
+/** 腳下的地面材質（決定腳步聲）：小路是石板，其他是草地 */
+export function surfaceAt(x, z) {
+  const onPath = LEVEL.paths.some(([px, pz, w, d]) => Math.abs(x - px) < w / 2 && Math.abs(z - pz) < d / 2);
+  const m = LEVEL.mound;
+  if (Math.hypot(x - m.x, z - m.z) < m.wallRadius) return 'stone';
+  return onPath ? 'stone' : 'grass';
+}
+
 /**
- * 玩家：鍵盤移動或點擊目的地自動走過去，處理碰撞、走路動畫與各種動作。
+ * 玩家：鍵盤／搖桿移動，或點擊目的地用 A* 尋路走過去；處理碰撞、地形高度、走路動畫與各種動作。
  */
 export class Player {
-  constructor(world, start) {
+  /**
+   * @param world World
+   * @param start {x, z}
+   * @param nav NavGrid（尋路用）
+   */
+  constructor(world, start, nav) {
     this.world = world;
+    this.nav = nav;
+    this.waypoints = [];
+    this.onStep = null;
     this.model = makePlayerModel();
     this.object = this.model.root;
-    this.object.position.set(start.x, 0, start.z);
+    this.object.position.set(start.x, heightAt(start.x, start.z), start.z);
     this.yaw = Math.PI; // 面向北方
     this.targetYaw = this.yaw;
     this.object.rotation.y = this.yaw;
@@ -40,22 +57,44 @@ export class Player {
     return this.object.position;
   }
 
-  setPosition(x, z) {
-    this.object.position.set(x, 0, z);
+  setPosition(x, z, yaw) {
+    this.object.position.set(x, heightAt(x, z), z);
+    if (Number.isFinite(yaw)) this.yaw = this.targetYaw = yaw;
     this.stop();
   }
 
-  /** 走到 point；距離小於 arriveDist 就算抵達並呼叫 onArrive。 */
+  /**
+   * 用尋路走到 point；最後距離小於 arriveDist 就算抵達並呼叫 onArrive。
+   * 回傳 { ok, reached }：ok=false 代表完全走不到；reached=false 代表只能走到附近。
+   */
   walkTo(point, onArrive = null, arriveDist = ARRIVE_DIST) {
-    this.target = new Vector3(point.x, 0, point.z);
+    const path = this.nav ? this.nav.findPath(this.position, point) : { points: [point], reached: true, unreachable: false };
+    if (path.unreachable || path.points.length === 0) {
+      if (Math.hypot(point.x - this.position.x, point.z - this.position.z) < arriveDist) {
+        onArrive?.();
+        return { ok: true, reached: true };
+      }
+      this.stop();
+      return { ok: false, reached: false };
+    }
+    this.waypoints = path.points.map((p) => new Vector3(p.x, 0, p.z));
+    this.target = this.waypoints[this.waypoints.length - 1];
+    this.finalPoint = new Vector3(point.x, 0, point.z);
     this.onArrive = onArrive;
     this.arriveDist = arriveDist;
     this.stuckTime = 0;
+    return { ok: true, reached: path.reached };
   }
 
   stop() {
     this.target = null;
+    this.waypoints = [];
     this.onArrive = null;
+  }
+
+  /** 目前的尋路路徑（測試與除錯用） */
+  get path() {
+    return this.waypoints.map((p) => ({ x: p.x, z: p.z }));
   }
 
   /** 慢慢轉身面向某個點 */
@@ -84,21 +123,36 @@ export class Player {
       this.stop();
       dir = move;
     } else if (this.target) {
-      const dx = this.target.x - this.position.x;
-      const dz = this.target.z - this.position.z;
-      const dist = Math.hypot(dx, dz);
-      if (dist < this.arriveDist) {
+      // 已經夠接近最終目標就算抵達
+      const fx = this.finalPoint.x - this.position.x;
+      const fz = this.finalPoint.z - this.position.z;
+      if (Math.hypot(fx, fz) < this.arriveDist) {
         const cb = this.onArrive;
         this.stop();
         cb?.();
       } else {
-        dir = { x: dx / dist, z: dz / dist };
+        let wp = this.waypoints[0];
+        while (wp && this.waypoints.length > 1 && Math.hypot(wp.x - this.position.x, wp.z - this.position.z) < 0.25) {
+          this.waypoints.shift();
+          wp = this.waypoints[0];
+        }
+        const dx = wp.x - this.position.x;
+        const dz = wp.z - this.position.z;
+        const dist = Math.hypot(dx, dz);
+        if (dist < ARRIVE_DIST && this.waypoints.length <= 1) {
+          const cb = this.onArrive;
+          this.stop();
+          cb?.();
+        } else if (dist > 1e-4) {
+          dir = { x: dx / dist, z: dz / dist };
+        }
       }
     }
 
     let moving = false;
     if (dir) {
-      const step = Math.min(SPEED * dt, this.target && !move ? this.position.distanceTo(this.target) : Infinity);
+      const wp = this.waypoints[0];
+      const step = Math.min(SPEED * dt, wp && !move ? Math.hypot(wp.x - this.position.x, wp.z - this.position.z) : Infinity);
       const before = { x: this.position.x, z: this.position.z };
       let next = { x: before.x + dir.x * step, z: before.z + dir.z * step };
       next = resolveCircle(next, RADIUS, this.world.colliders);
@@ -112,7 +166,7 @@ export class Player {
       // 點擊移動時被擋住太久就放棄，避免卡在牆邊抖動
       if (this.target && !moving) {
         this.stuckTime += dt;
-        if (this.stuckTime > 0.35) this.stop();
+        if (this.stuckTime > 0.6) this.stop();
       } else {
         this.stuckTime = 0;
       }
@@ -140,6 +194,7 @@ export class Player {
       this.stepSign = sign;
       const foot = m.feet[sign > 0 ? 0 : 1].getWorldPosition(new Vector3());
       this.world.burst('dust', foot);
+      this.onStep?.(surfaceAt(this.position.x, this.position.z));
     }
 
     // ---- 基本姿勢（走路 + 待機呼吸） ----
@@ -198,7 +253,7 @@ export class Player {
     m.leftArm.rotation.z = -armSpread;
     m.rightArm.rotation.z = armSpread;
     m.head.rotation.set(headPitch, headYaw, 0);
-    this.object.position.y = lift;
+    this.object.position.y = heightAt(this.position.x, this.position.z) + lift;
 
     // 緞帶跟著動作飄，燈籠搖晃
     m.ribbon.rotation.x = 0.15 + mb * 0.55 + Math.sin(this.walkPhase * 2) * 0.12 * mb + Math.sin(t * 1.8) * 0.05 + lift;
