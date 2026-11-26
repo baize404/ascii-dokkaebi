@@ -53,6 +53,11 @@ export class Player {
     world.scene.add(this.object);
   }
 
+  /** 是否正在播放動作（撿拾、操作等） */
+  get acting() {
+    return !!this.action;
+  }
+
   get position() {
     return this.object.position;
   }
@@ -66,8 +71,9 @@ export class Player {
   /**
    * 用尋路走到 point；最後距離小於 arriveDist 就算抵達並呼叫 onArrive。
    * 回傳 { ok, reached }：ok=false 代表完全走不到；reached=false 代表只能走到附近。
+   * onFail(reason) 會在途中被擋住而放棄時呼叫（reason = 'blocked'），讓遊戲給玩家明確回饋。
    */
-  walkTo(point, onArrive = null, arriveDist = ARRIVE_DIST) {
+  walkTo(point, onArrive = null, arriveDist = ARRIVE_DIST, onFail = null) {
     const path = this.nav ? this.nav.findPath(this.position, point) : { points: [point], reached: true, unreachable: false };
     if (path.unreachable || path.points.length === 0) {
       if (Math.hypot(point.x - this.position.x, point.z - this.position.z) < arriveDist) {
@@ -81,6 +87,7 @@ export class Player {
     this.target = this.waypoints[this.waypoints.length - 1];
     this.finalPoint = new Vector3(point.x, 0, point.z);
     this.onArrive = onArrive;
+    this.onFail = onFail;
     this.arriveDist = arriveDist;
     this.stuckTime = 0;
     return { ok: true, reached: path.reached };
@@ -90,6 +97,7 @@ export class Player {
     this.target = null;
     this.waypoints = [];
     this.onArrive = null;
+    this.onFail = null;
   }
 
   /** 目前的尋路路徑（測試與除錯用） */
@@ -166,7 +174,11 @@ export class Player {
       // 點擊移動時被擋住太久就放棄，避免卡在牆邊抖動
       if (this.target && !moving) {
         this.stuckTime += dt;
-        if (this.stuckTime > 0.6) this.stop();
+        if (this.stuckTime > 0.6) {
+          const fail = this.onFail;
+          this.stop();
+          fail?.('blocked');
+        }
       } else {
         this.stuckTime = 0;
       }

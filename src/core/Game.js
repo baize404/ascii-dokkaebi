@@ -18,6 +18,7 @@ import { Panels } from '../ui/Panels.js';
 import { Screens } from '../ui/Screens.js';
 import { updatePointScale } from '../world/Particles.js';
 import { World } from '../world/World.js';
+import { AdaptiveQuality } from './AdaptiveQuality.js';
 import { EventBus } from './EventBus.js';
 import { Input } from './Input.js';
 import { Settings } from './Settings.js';
@@ -54,16 +55,22 @@ export class Game {
     this.minimap = new Minimap();
     this.minimapCanvas = document.getElementById('minimap');
     this.joystick = new Joystick((v) => this.input.setJoystick(v));
+    this.input.onReset = () => this.joystick.reset();
 
     this.mode = 'title';
     this.session = null;
     this.preview = new World(LEVEL, LANTERN_ORDER);
-    this.autoQuality = this.touch ? 'medium' : 'high';
+    // 自適應畫質：手機從中間的階梯開始
+    this.adaptive = new AdaptiveQuality({ start: this.touch ? 2 : 0 });
     this.fps = 60;
     this.perfTimer = 0;
     this.lastTime = 0;
 
-    this.renderer.onResize = (w, h) => this.rig.setAspect(w / h);
+    this.renderer.onResize = (w, h, layout) => {
+      this.rig.setAspect(w / h);
+      // ASCII 模式下鏡頭對齊字元格，靜止的景物不會因鏡頭微動而閃爍
+      this.rig.cellRows = this.renderer.asciiEnabled ? layout.rows : 0;
+    };
     this.renderer.resize();
     this.#applyAllSettings();
     this.#bindEvents();
@@ -82,7 +89,29 @@ export class Game {
 
   get effectiveQuality() {
     const q = this.settings.get('quality');
-    return q === 'auto' ? this.autoQuality : q;
+    return q === 'auto' ? this.adaptive.step.quality : q;
+  }
+
+  /** 把設定（含自適應的部分）套用到渲染器與場景 */
+  #applyRender() {
+    const s = this.settings;
+    const step = this.adaptive.step;
+    const density = s.get('density');
+    const sampling = s.get('sampling');
+    const quality = this.effectiveQuality;
+    // 對話、調查特寫時（鏡頭拉近）自適應模式提高取樣，看清楚手部與表情
+    const closeUp = this.rig.focusAmount > 0.5 && density === 'adaptive' && sampling === 'auto' && quality !== 'low';
+    this.renderer.set({
+      mode: s.get('renderMode'),
+      density: density === 'adaptive' ? step.density : density,
+      samples: sampling === 'auto' ? (density === 'adaptive' ? (closeUp ? Math.min(8, step.samples * 2) : step.samples) : 'auto') : sampling,
+      pixelRatio: s.get('pixelRatio'),
+      quality,
+      shape: s.get('glyphShape'),
+      weight: s.get('glyphWeight'),
+    });
+    this.world.setQuality(quality, s.get('shadows'));
+    this.rig.cellRows = this.renderer.asciiEnabled ? this.renderer.layout.rows : 0;
   }
 
   #applyAllSettings() {
@@ -93,14 +122,15 @@ export class Game {
     const v = this.settings.get(key);
     const root = document.documentElement;
     switch (key) {
-      case 'ascii':
-        this.renderer.asciiEnabled = v;
-        break;
+      case 'renderMode':
       case 'density':
-        this.renderer.setDensity(v);
-        break;
+      case 'sampling':
       case 'quality':
-        this.#applyQuality();
+      case 'pixelRatio':
+      case 'shadows':
+      case 'glyphShape':
+      case 'glyphWeight':
+        this.#applyRender();
         break;
       case 'uiScale':
         root.dataset.uiScale = v;
@@ -123,23 +153,27 @@ export class Game {
   }
 
   #applyQuality() {
-    const q = this.effectiveQuality;
-    this.renderer.setQuality(q);
-    this.world.setQuality(q);
+    this.#applyRender();
   }
 
-  /** 自動畫質：幀率持續偏低就降一級（不會自動升級，避免來回跳動） */
+  /** 自適應畫質：交給 AdaptiveQuality 判斷（遲滯＋冷卻），只有設成自動的項目會跟著變 */
   #monitorPerformance(dt) {
     this.fps = this.fps * 0.95 + (1 / Math.max(dt, 1e-3)) * 0.05;
+    this.frameMs = (this.frameMs ?? 16) * 0.95 + dt * 1000 * 0.05;
     this.perfTimer += dt;
-    if (this.perfTimer < 3) return;
-    this.perfTimer = 0;
-    if (this.settings.get('showFps')) this.hud.setFps(this.fps);
-    if (this.settings.get('quality') !== 'auto' || this.mode !== 'playing') return;
-    const next = this.autoQuality === 'high' && this.fps < 40 ? 'medium' : this.autoQuality === 'medium' && this.fps < 26 ? 'low' : null;
-    if (next) {
-      this.autoQuality = next;
-      this.#applyQuality();
+    if (this.perfTimer >= 1) {
+      this.perfTimer = 0;
+      if (this.settings.get('showFps')) this.hud.setFps(this.fps, this.renderer.layout);
+    }
+    const s = this.settings;
+    const adaptive = s.get('quality') === 'auto' || s.get('density') === 'adaptive';
+    if (!adaptive || this.mode !== 'playing' || this.frozen) return;
+    if (this.adaptive.update(dt) !== null) this.#applyRender();
+    // 鏡頭拉近／拉遠時更新特寫取樣
+    const close = this.rig.focusAmount > 0.5;
+    if (close !== this.wasClose) {
+      this.wasClose = close;
+      this.#applyRender();
     }
   }
 
@@ -274,7 +308,7 @@ export class Game {
     this.panels.openPause([
       ['繼續遊戲', () => this.panels.close(), true],
       ['任務日誌', () => this.#openJournal()],
-      ['設定', () => this.panels.openSettings({ onHelp: () => this.panels.openHelp(this.touch) })],
+      ['設定', () => this.panels.openSettings({ onHelp: () => this.panels.openHelp(this.touch), preview: () => ({ layout: this.renderer.layout, atlas: this.renderer.atlas }) })],
       ['操作說明', () => this.panels.openHelp(this.touch)],
       ['民俗圖鑑', () => this.panels.openCodex(this.codex)],
       ['存檔並回到標題', () => this.returnToTitle()],
@@ -312,7 +346,7 @@ export class Game {
     bus.on('ui:continue', () => this.continueGame());
     bus.on('ui:restart', () => this.newGame());
     bus.on('ui:title', () => this.returnToTitle());
-    bus.on('ui:settings', () => this.panels.openSettings({ onHelp: () => this.panels.openHelp(this.touch) }));
+    bus.on('ui:settings', () => this.panels.openSettings({ onHelp: () => this.panels.openHelp(this.touch), preview: () => ({ layout: this.renderer.layout, atlas: this.renderer.atlas }) }));
     bus.on('ui:help', () => this.panels.openHelp(this.touch));
     bus.on('ui:codex', () => this.panels.openCodex(this.codex));
     bus.on('ui:achievements', () => this.panels.openAchievements(this.achievements));
@@ -336,14 +370,21 @@ export class Game {
     bus.on('input:help', () => (this.panels.isOpen ? this.panels.close() : this.panels.openHelp(this.touch)));
     bus.on('ui:interact', () => playing() && this.session.tryInteract());
     bus.on('input:action', () => {
-      if (playing() && !this.dialogue.isOpen && !this.session.busy) this.session.tryInteract();
+      if (playing() && !this.dialogue.isOpen) this.session.tryInteract();
     });
     bus.on('input:tap', (p) => {
       if (this.panels.isOpen || !this.session) return;
       this.audio.unlock();
       this.session.onTap(p);
     });
-    bus.on('input:toggleAscii', () => this.settings.set('ascii', !this.settings.get('ascii')));
+    bus.on('input:toggleAscii', () => {
+      const mode = this.settings.get('renderMode');
+      if (mode === '3d') this.settings.set('renderMode', this.lastAsciiMode ?? 'hd');
+      else {
+        this.lastAsciiMode = mode;
+        this.settings.set('renderMode', '3d');
+      }
+    });
     bus.on('input:zoom', (d) => this.rig.zoomBy(d));
     bus.on('settings:change', ({ key }) => this.#applySetting(key));
     document.addEventListener('pointerdown', () => this.audio.unlock(), { once: true });
@@ -373,7 +414,7 @@ export class Game {
   #frame(now) {
     const dt = Math.min(this.maxDt, (now - (this.lastTime || now)) / 1000);
     this.lastTime = now;
-    const paused = this.panels.isOpen;
+    const paused = this.panels.isOpen || this.frozen;
     if (!paused) {
       if (this.session) this.session.update(dt, this.#moveVector(), this.mode === 'playing');
       else this.preview?.update(dt);
@@ -394,6 +435,7 @@ export class Game {
         const st = ss?.state;
         return {
           mode: this.mode,
+          phase: ss?.phase ?? null,
           busy: ss?.busy ?? false,
           dialogueOpen: this.dialogue.isOpen,
           panelOpen: this.panels.isOpen,
@@ -412,11 +454,15 @@ export class Game {
           ascii: this.renderer.asciiEnabled,
           quality: this.effectiveQuality,
           density: this.renderer.density,
+          renderMode: this.renderer.mode,
+          adaptiveLevel: this.adaptive.level,
           codex: [...this.codex],
           achievements: Object.keys(this.achievements.unlocked),
           hasSave: this.saves.hasSave(),
           fps: this.fps,
           ropeOpen: ss?.world.ropeOpen ?? false,
+          zoom: this.rig.userZoom,
+          toasts: this.hud.log ?? [],
         };
       },
       interactables: () => (s() ? s().world.activeInteractables().map(({ id, x, z }) => ({ id, x, z })) : []),
@@ -429,6 +475,23 @@ export class Game {
       shellAnswer: () => s()?.state.shell.round?.answer ?? null,
       carvingAt: (spot) => s()?.state.carvingAt(spot),
       save: () => s()?.save(),
+      /** 固定鏡頭（比較截圖用）：凍結時間並把鏡頭放到指定位置 */
+      photo: (pos, look) => {
+        this.frozen = true;
+        this.rig.snapShot(new Vector3(...pos), new Vector3(...look));
+        this.rig.update(0);
+      },
+      /** 切換渲染模式與字元密度（等同在設定裡切換） */
+      setRender: (render, density, sampling) => {
+        this.settings.set('renderMode', render === 'ascii' ? 'hd' : render);
+        if (density && density !== '-') this.settings.set('density', density);
+        if (sampling) this.settings.set('sampling', String(sampling));
+      },
+      layout: () => ({ ...this.renderer.layout, mode: this.renderer.mode, atlas: { pure: this.renderer.atlas.pure, hd: this.renderer.atlas.hd } }),
+      unfreeze: () => {
+        this.frozen = false;
+        if (s()) this.rig.follow(s().player.position, true);
+      },
       /** 查詢「如果在這個螢幕位置點一下」會點到什麼（唯讀，不會移動角色） */
       pickAt: (sx, sy) => {
         const ss = s();

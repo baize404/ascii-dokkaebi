@@ -1,3 +1,5 @@
+import { GestureTracker } from './Gesture.js';
+
 const MOVE_KEYS = {
   KeyW: [0, 1],
   ArrowUp: [0, 1],
@@ -32,43 +34,26 @@ export class Input {
     this.pressed = new Set();
     this.joy = { x: 0, y: 0 };
 
+    this.onReset = null;
     window.addEventListener('keydown', (e) => this.#onKeyDown(e));
     window.addEventListener('keyup', (e) => this.pressed.delete(e.code));
-    window.addEventListener('blur', () => this.clear());
+    // 視窗失去焦點或切到背景：清掉所有按住的鍵、手勢與搖桿，避免角色自己一直走
+    window.addEventListener('blur', () => this.clear(true));
+    document.addEventListener('visibilitychange', () => document.hidden && this.clear(true));
 
-    // 點擊／輕觸（只有畫布上的點擊才算，介面上的不算）
-    const pointers = new Map();
-    let pinchStart = null;
-    canvas.addEventListener('pointerdown', (e) => {
-      pointers.set(e.pointerId, { x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY });
-      if (pointers.size === 2) {
-        const [a, b] = [...pointers.values()];
-        pinchStart = Math.hypot(a.x - b.x, a.y - b.y);
+    // 畫布上的點擊／拖曳／雙指縮放交給手勢狀態機判斷（介面與搖桿不經過畫布）
+    this.gesture = new GestureTracker({ slop: TAP_SLOP_PX });
+    const emit = (events) => {
+      for (const ev of events) {
+        if (ev.type === 'tap') bus.emit('input:tap', { x: ev.x, y: ev.y });
+        else if (ev.type === 'zoom') bus.emit('input:zoom', ev.delta);
       }
-    });
-    canvas.addEventListener('pointermove', (e) => {
-      const p = pointers.get(e.pointerId);
-      if (!p) return;
-      p.x = e.clientX;
-      p.y = e.clientY;
-      if (pointers.size === 2 && pinchStart) {
-        const [a, b] = [...pointers.values()];
-        const d = Math.hypot(a.x - b.x, a.y - b.y);
-        bus.emit('input:zoom', (pinchStart - d) * 0.004);
-        pinchStart = d;
-      }
-    });
-    const up = (e) => {
-      const p = pointers.get(e.pointerId);
-      pointers.delete(e.pointerId);
-      if (pointers.size < 2) pinchStart = null;
-      if (!p || pointers.size > 0) return;
-      const dx = e.clientX - p.sx;
-      const dy = e.clientY - p.sy;
-      if (dx * dx + dy * dy <= TAP_SLOP_PX * TAP_SLOP_PX) bus.emit('input:tap', { x: e.clientX, y: e.clientY });
     };
-    canvas.addEventListener('pointerup', up);
-    canvas.addEventListener('pointercancel', (e) => pointers.delete(e.pointerId));
+    canvas.addEventListener('pointerdown', (e) => emit(this.gesture.down(e.pointerId, e.clientX, e.clientY, e.timeStamp)));
+    canvas.addEventListener('pointermove', (e) => emit(this.gesture.move(e.pointerId, e.clientX, e.clientY)));
+    canvas.addEventListener('pointerup', (e) => emit(this.gesture.up(e.pointerId, e.clientX, e.clientY, e.timeStamp)));
+    canvas.addEventListener('pointercancel', (e) => this.gesture.cancel(e.pointerId));
+    canvas.addEventListener('pointerleave', (e) => e.pointerType === 'mouse' && this.gesture.cancel(e.pointerId));
     canvas.addEventListener(
       'wheel',
       (e) => {
@@ -115,7 +100,13 @@ export class Input {
     return len > 1 ? { x: x / len, y: y / len } : { x, y };
   }
 
-  clear() {
+  /** 清除按住的鍵；all=true 時連手勢與搖桿一起清除 */
+  clear(all = false) {
     this.pressed.clear();
+    if (all) {
+      this.gesture.reset();
+      this.joy = { x: 0, y: 0 };
+      this.onReset?.();
+    }
   }
 }

@@ -32,6 +32,7 @@ export class CameraRig {
     this.shakeStrength = 0;
     this.shakeEnabled = true;
     this.time = 0;
+    this.cellRows = 0;
   }
 
   setAspect(aspect) {
@@ -60,6 +61,13 @@ export class CameraRig {
     this.mode = 'shot';
     this.shotPos.copy(position);
     this.shotLook.copy(lookAt);
+  }
+
+  /** 立刻切到固定鏡頭（測試比較截圖用，不經過補間） */
+  snapShot(position, lookAt) {
+    this.shot(position, lookAt);
+    this.base.copy(position);
+    this.lookAt.copy(lookAt);
   }
 
   title() {
@@ -127,6 +135,7 @@ export class CameraRig {
     }
 
     this.camera.position.copy(this.base);
+    const look = this.#snapToCells();
     if (this.shakeTime > 0) {
       this.shakeTime = Math.max(0, this.shakeTime - dt);
       const amp = this.shakeStrength * (this.shakeTime / this.shakeDuration);
@@ -134,6 +143,31 @@ export class CameraRig {
       this.camera.position.y += (Math.random() - 0.5) * 2 * amp;
       this.camera.position.z += (Math.random() - 0.5) * 2 * amp;
     }
-    this.camera.lookAt(this.lookAt);
+    this.camera.lookAt(look);
   }
+
+  /**
+   * ASCII 抗閃爍：把鏡頭在畫面平面上的平移對齊到「一格字元」的整數倍。
+   * 鏡頭方向不變，只做平移，所以焦點距離上的景物每次剛好移動整數格，靜止的景物字元不會跳動。
+   */
+  #snapToCells() {
+    if (!this.cellRows) return this.lookAt;
+    const dir = this.#tmp.dir.subVectors(this.lookAt, this.camera.position);
+    const dist = dir.length();
+    if (dist < 1e-3) return this.lookAt;
+    dir.divideScalar(dist);
+    const right = this.#tmp.right.crossVectors(dir, this.camera.up).normalize();
+    const up = this.#tmp.up.crossVectors(right, dir);
+    const cell = (2 * dist * Math.tan((this.camera.fov * Math.PI) / 360)) / this.cellRows;
+    const r = this.camera.position.dot(right);
+    const u = this.camera.position.dot(up);
+    const offset = this.#tmp.offset
+      .copy(right)
+      .multiplyScalar(Math.round(r / cell) * cell - r)
+      .addScaledVector(up, Math.round(u / cell) * cell - u);
+    this.camera.position.add(offset);
+    return this.#tmp.look.copy(this.lookAt).add(offset);
+  }
+
+  #tmp = { dir: new Vector3(), right: new Vector3(), up: new Vector3(), offset: new Vector3(), look: new Vector3() };
 }

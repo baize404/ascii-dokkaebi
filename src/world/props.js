@@ -455,7 +455,8 @@ export function makePond(r, rand) {
           float sparkle = pow(max(0.0, sin(vP.x * 5.0 + uTime) * sin(vP.y * 6.0 - uTime * 1.3)), 6.0);
           vec3 deep = vec3(0.03, 0.06, 0.10);
           vec3 glint = mix(vec3(0.20, 0.42, 0.55), vec3(0.85, 0.82, 0.62), uMoon);
-          gl_FragColor = vec4(deep + glint * (ripple * 0.12 + sparkle * (0.5 + uMoon)), 1.0);
+          // alpha 0.75 = 柔和表面（給 ASCII 的物件遮罩；原始 3D 模式不受影響）
+          gl_FragColor = vec4(deep + glint * (ripple * 0.12 + sparkle * (0.5 + uMoon)), 0.75);
         }`,
     }),
   );

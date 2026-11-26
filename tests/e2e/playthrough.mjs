@@ -307,18 +307,21 @@ async function desktopFull(browser, url) {
   await page.waitForTimeout(800);
   await page.locator('#btn-settings-title').click();
   await page.locator('#panel-tabs button', { hasText: '畫面' }).click();
-  await page.locator('[data-setting="density"] button', { hasText: '粗' }).click();
+  await page.locator('[data-setting="density"] button', { hasText: 'Classic' }).click();
   await page.locator('[data-setting="quality"] button', { hasText: '低' }).click();
-  await page.locator('[data-setting="ascii"] button', { hasText: '原始 3D' }).click();
+  await page.locator('[data-setting="renderMode"] button', { hasText: '原始 3D' }).click();
+  await page.waitForTimeout(150);
+  const preview = await page.locator('.glyph-preview').textContent();
   await page.locator('#panel-tabs button', { hasText: '介面與無障礙' }).click();
   await page.locator('[data-setting="reduceMotion"] button', { hasText: '開' }).click();
   await page.shot('settings');
   s = await state(page);
-  check(s.density === 'coarse' && s.quality === 'low' && !s.ascii, '設定立即套用（字元密度、畫質、3D 模式）');
+  check(s.density === 'classic' && s.quality === 'low' && !s.ascii && s.renderMode === '3d', '設定立即套用（字元密度、畫質、3D 模式）');
+  check(/Pure ASCII 階梯 \d+ 階/.test(preview) && /\d+×\d+ 格/.test(preview), '設定裡的字元圖集預覽顯示實際階梯與格數');
   await page.reload();
   await page.waitForTimeout(1200);
   s = await state(page);
-  check(s.density === 'coarse' && s.quality === 'low' && !s.ascii && (await page.evaluate(() => document.documentElement.dataset.reduceMotion)) === 'true', '設定在重新整理後保留');
+  check(s.density === 'classic' && s.quality === 'low' && !s.ascii && (await page.evaluate(() => document.documentElement.dataset.reduceMotion)) === 'true', '設定在重新整理後保留');
   await page.locator('#btn-settings-title').click();
   await page.locator('#panel-tabs button', { hasText: '介面與無障礙' }).click();
   await page.locator('#panel-body button', { hasText: '恢復預設值' }).click();
@@ -328,8 +331,24 @@ async function desktopFull(browser, url) {
   await startNewGame(page);
   s = await state(page);
   check(s.chapter === 1 && s.inventory.length === 0 && s.clues.length === 0 && !s.flags.readStele, '重新開始後進度全部清除');
+  const before = await state(page);
   await page.keyboard.press('t');
-  check((await state(page)).ascii === true || (await state(page)).ascii === false, 'T 鍵切換 ASCII／3D');
+  await page.waitForTimeout(200);
+  const after = await state(page);
+  check(before.ascii !== after.ascii && after.player.x === before.player.x && after.chapter === before.chapter, 'T 鍵切換 ASCII／3D，玩家位置與進度不變');
+  // 四種渲染模式輪流切換：遊戲狀態不受影響，沒有錯誤
+  for (const mode of ['pure', 'hd', 'hybrid', '3d', 'hd']) await api(page, 'setRender', [mode]);
+  await page.waitForTimeout(300);
+  const modes = await state(page);
+  check(modes.renderMode === 'hd' && modes.player.x === before.player.x, '四種渲染模式切換不會重設玩家位置');
+  for (const d of ['classic', 'fine', 'ultra', 'cinematic']) {
+    await api(page, 'setRender', ['hd', d, '4']);
+    await page.waitForTimeout(250);
+    await page.screenshot({ path: join(shots, `density-${d}.png`) });
+  }
+  const layout = await api(page, 'layout');
+  check(layout.cols > 0 && layout.sceneWidth === layout.cols * layout.samplesX, `Cinematic 密度：${layout.cols}×${layout.rows} 格，場景貼圖 ${layout.sceneWidth}×${layout.sceneHeight}`);
+  await api(page, 'setRender', ['hd', 'adaptive', 'auto']);
   check(page.errors.length === 0, `沒有 JavaScript 錯誤${page.errors.length ? '：' + page.errors.join(' | ') : ''}`);
   await page.close();
 }
@@ -421,6 +440,77 @@ async function phoneLandscape(browser, url) {
   await page.close();
 }
 
+async function inputs(browser, url) {
+  console.log('\n[inputs] 輸入與回饋：失焦清除、雙指縮放、走不到的提示、互動狀態');
+  const page = await openPage(browser, url, DESKTOP, 'inputs');
+  await startNewGame(page);
+  check((await state(page)).phase === 'Exploring', '開始時是 Exploring 狀態');
+
+  // 按住 W 時視窗失去焦點：角色要停下來，不能自己一直走
+  await page.keyboard.down('w');
+  await page.waitForTimeout(400);
+  await page.evaluate(() => window.dispatchEvent(new Event('blur')));
+  const a = (await state(page)).player;
+  await page.waitForTimeout(600);
+  const b = (await state(page)).player;
+  await page.keyboard.up('w');
+  check(Math.hypot(a.x - b.x, a.z - b.z) < 0.05, '視窗失焦後按住的方向鍵被清除，角色停下');
+
+  // 雙指縮放：模擬兩根手指的 pointer 事件，放開後不能被當成點擊地面
+  const zoom0 = (await state(page)).zoom;
+  await page.evaluate(() => {
+    const c = document.querySelector('canvas');
+    const ev = (type, id, x, y) => c.dispatchEvent(new PointerEvent(type, { pointerId: id, clientX: x, clientY: y, pointerType: 'touch', bubbles: true }));
+    ev('pointerdown', 11, 600, 400);
+    ev('pointerdown', 12, 700, 400);
+    ev('pointermove', 12, 760, 400);
+    ev('pointermove', 12, 820, 400);
+    ev('pointerup', 12, 820, 400);
+    ev('pointerup', 11, 601, 401);
+  });
+  await page.waitForTimeout(300);
+  const afterPinch = await state(page);
+  check(afterPinch.zoom < zoom0, `雙指張開會拉近鏡頭（${zoom0.toFixed(2)} → ${afterPinch.zoom.toFixed(2)}）`);
+  check(afterPinch.path.length === 0, '縮放結束時剩下的手指放開，不會被當成點擊地面');
+
+  // 點祭壇（금줄還沒解開）：要說明原因，不能沒聲音地停下
+  const altar = (await api(page, 'interactables')).find((i) => i.id === 'altar');
+  await api(page, 'photo', [[0, 26, 4], [0, 0, -12]]);
+  const sp = await api(page, 'projectToScreen', [altar.x, undefined, altar.z]);
+  await page.mouse.click(sp.x, sp.y);
+  await page.waitForTimeout(400);
+  const toasts = (await state(page)).toasts;
+  check(toasts.some((t) => t.includes('금줄')), `點被금줄擋住的祭壇會說明原因（${toasts.at(-1) ?? '沒有提示'}）`);
+  await api(page, 'unfreeze');
+
+  // 離物件有點遠時按 E：提示靠近
+  await api(page, 'teleport', [0, 22]);
+  await page.waitForTimeout(300);
+  const before = (await state(page)).toasts.length;
+  await page.keyboard.press('e');
+  await page.waitForTimeout(300);
+  const s2 = await state(page);
+  check(s2.nearest !== null || s2.toasts.length > before, '按互動鍵但不在範圍內時有提示');
+
+  // 對話中按 E／點地面不會觸發別的互動
+  const stele = (await api(page, 'interactables')).find((i) => i.id === 'stele');
+  await api(page, 'teleport', [stele.x, stele.z]);
+  await page.waitForTimeout(300);
+  await page.keyboard.press('e');
+  await page.waitForTimeout(300);
+  const inDlg = await state(page);
+  check(inDlg.phase === 'Dialogue', `互動後進入 Dialogue 狀態（${inDlg.phase}）`);
+  const interactions = inDlg.stats.interactions;
+  await page.keyboard.press('e');
+  await page.mouse.click(200, 600);
+  await page.waitForTimeout(200);
+  check((await state(page)).stats.interactions === interactions, '對話中重複按鍵、點地面不會重複觸發互動');
+  await finishDialogue(page);
+  check((await state(page)).phase === 'Exploring', '對話結束回到 Exploring');
+  check(page.errors.length === 0, `沒有 JavaScript 錯誤${page.errors.length ? '：' + page.errors.join(' | ') : ''}`);
+  await page.close();
+}
+
 async function bootFailure(browser, url) {
   console.log('\n[boot-failure] 載入失敗說明');
   const page = await browser.newPage(DESKTOP);
@@ -438,7 +528,7 @@ const browser = await chromium.launch({
   channel: process.env.CHROME_PATH ? undefined : 'chrome',
   args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'],
 });
-const scenarios = { desktopReal, desktopFull, phonePortrait, phoneLandscape, bootFailure };
+const scenarios = { inputs, desktopReal, desktopFull, phonePortrait, phoneLandscape, bootFailure };
 try {
   for (const [name, fn] of Object.entries(scenarios)) {
     if (only && only !== name) continue;

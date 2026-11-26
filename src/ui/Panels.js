@@ -215,14 +215,14 @@ export class Panels {
 
   // ---------- 設定 ----------
 
-  openSettings({ onHelp } = {}) {
+  openSettings({ onHelp, preview } = {}) {
     const s = this.settings;
     const range = (key, label) => {
       const input = el('input', { type: 'range', min: 0, max: 100, step: 5, value: Math.round(s.get(key) * 100), id: `set-${key}`, 'aria-label': label });
       input.addEventListener('input', () => s.set(key, Number(input.value) / 100));
       return el('div', { class: 'setting' }, el('label', { for: `set-${key}`, text: label }), input);
     };
-    const seg = (key, label, options) => {
+    const seg = (key, label, options, hint = '') => {
       const wrap = el('div', { class: 'seg', role: 'group', 'aria-label': label });
       const draw = () => {
         wrap.replaceChildren(
@@ -231,13 +231,29 @@ export class Panels {
               s.set(key, value);
               this.bus.emit('sfx', 'ui');
               draw();
+              requestAnimationFrame(() => refreshPreview());
             } }, text),
           ),
         );
       };
       draw();
-      return el('div', { class: 'setting', 'data-setting': key }, el('span', { text: label }), wrap);
+      const row = el('div', { class: 'setting', 'data-setting': key }, el('span', { text: label }), wrap);
+      return hint ? el('div', { class: 'setting-group' }, row, el('p', { class: 'setting-hint', text: hint })) : row;
     };
+    // 字元圖集預覽：目前實際使用的亮度階梯與格數，調整時立即更新（畫面也會在面板後方即時改變）
+    const previewBox = el('pre', { class: 'glyph-preview', 'aria-label': '字元圖集預覽' });
+    const refreshPreview = () => {
+      const p = preview?.();
+      if (!p) return;
+      const l = p.layout;
+      previewBox.textContent = [
+        `Pure ASCII 階梯 ${p.atlas.pure.length} 階：「${p.atlas.pure}」`,
+        `HD ASCII 階梯 ${p.atlas.hd.length} 階：「${p.atlas.hd}」`,
+        `輪廓字元：| \\ - /`,
+        `目前：${l.cols}×${l.rows} 格、每格 ${(l.cellWidth / l.dpr).toFixed(1)} CSS px、取樣 ${l.samplesX}×${l.samplesY}、場景貼圖 ${l.sceneWidth}×${l.sceneHeight}、DPR ${l.dpr}`,
+      ].join('\n');
+    };
+    refreshPreview();
     const onOff = [
       [true, '開'],
       [false, '關'],
@@ -253,23 +269,55 @@ export class Panels {
         label: '畫面',
         render: (body) =>
           body.append(
-            seg('ascii', 'ASCII 畫面', [
-              [true, 'ASCII'],
-              [false, '原始 3D'],
-            ]),
+            el('h3', { class: 'setting-head', text: 'ASCII 畫面' }),
+            seg('renderMode', '渲染模式', [
+              ['pure', 'Pure'],
+              ['hd', 'HD'],
+              ['hybrid', 'Hybrid'],
+              ['3d', '原始 3D'],
+            ], 'Pure：只用字元。HD：更多明暗層次與輪廓字元。Hybrid：字元畫面加上燈火、水面的柔和光影。原始 3D：不經過 ASCII。切換不影響遊戲進度（T 鍵也可切換）。'),
             seg('density', '字元密度', [
-              ['fine', '細'],
-              ['normal', '中'],
-              ['coarse', '粗'],
+              ['adaptive', '自適應'],
+              ['classic', 'Classic'],
+              ['fine', 'Fine'],
+              ['ultra', 'Ultra'],
+              ['cinematic', 'Cinematic'],
+            ], '每格字元的大小：Classic 約 9 px、Fine 約 6 px、Ultra 約 4 px、Cinematic 約 3 px（字元幾乎看不出形狀，效能成本最高）。自適應會依幀率調整。'),
+            seg('sampling', '場景取樣', [
+              ['auto', '自動'],
+              ['2', '2×2'],
+              ['4', '4×4'],
+              ['8', '8×8'],
+            ], '每格字元由多少個場景像素平均而來。越高，手指、窗櫺、火焰尖端越不容易在轉換前消失，但越耗效能。'),
+            seg('glyphShape', '字元比例', [
+              ['square', '方格'],
+              ['tall', '直長'],
+            ], '方格比較細緻；直長接近一般文字的比例。'),
+            seg('glyphWeight', '字體粗細', [
+              ['bold', '粗'],
+              ['normal', '細'],
             ]),
-            seg('quality', '畫質', [
+            previewBox,
+            el('h3', { class: 'setting-head', text: '3D 渲染' }),
+            seg('quality', '場景細節', [
               ['auto', '自動'],
               ['low', '低'],
               ['medium', '中'],
               ['high', '高'],
+            ], '草叢、粒子、螢火蟲的數量。自動會依實際幀率調整（有冷卻時間，不會來回跳動）。'),
+            seg('pixelRatio', '畫布解析度', [
+              ['auto', '自動'],
+              ['1', '1×'],
+              ['1.5', '1.5×'],
+              ['2', '2×'],
+            ], 'Canvas 的裝置像素比上限：只影響字元筆畫的銳利度，不改變字元格數。'),
+            seg('shadows', '陰影', [
+              ['auto', '自動'],
+              ['off', '關'],
+              ['low', '低'],
+              ['high', '高'],
             ]),
-            seg('showFps', '顯示 FPS', onOff),
-            el('p', { class: 'muted', text: '「自動」會依實際幀率調整陰影、草叢與粒子數量。' }),
+            seg('showFps', '顯示 FPS', onOff, '左上角顯示幀率、幀時間與目前的格數。'),
           ),
       },
       {

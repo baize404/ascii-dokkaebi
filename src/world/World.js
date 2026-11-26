@@ -1,3 +1,4 @@
+import { preserveMaskBlending, tagObject } from '../render/objectId.js';
 import {
   AdditiveBlending,
   AmbientLight,
@@ -156,6 +157,7 @@ export class World {
     this.#buildTrees(rand);
     this.#buildDetails(rand);
     this.#buildInteractables();
+    this.#tagForAscii();
     this.#setupShadows();
   }
 
@@ -494,6 +496,13 @@ export class World {
     this.#updateFacePoints();
   }
 
+  /** 物件遮罩：角色與互動物件在 ASCII 中優先保留輪廓與細節 */
+  #tagForAscii() {
+    for (const c of [this.dokkaebi, this.grandma, this.cat]) tagObject(c.root, 'character');
+    for (const o of [...this.jangseung, this.jars, this.well, this.altar.group, this.ropeGate, ...this.shellJars, ...this.lanterns.map((l) => l.group)]) tagObject(o, 'interactable');
+    preserveMaskBlending(this.scene);
+  }
+
   #updateFacePoints() {
     const L = this.level;
     const set = (id, x, z) => this.facePoints.set(id, new Vector3(x, 0, z));
@@ -559,13 +568,15 @@ export class World {
 
   // ---------- 設定 ----------
 
-  setQuality(name) {
+  /** @param shadows 'auto'（依畫質）| 'off' | 'low' | 'high'：陰影解析度與整體畫質分開設定 */
+  setQuality(name, shadows = 'auto') {
     const q = QUALITY[name] ?? QUALITY.high;
     this.quality = q;
+    const size = { off: 0, low: 1024, high: 2048 }[shadows] ?? q.shadows;
     const light = this.starlight;
-    light.castShadow = q.shadows > 0;
-    if (q.shadows && light.shadow.mapSize.x !== q.shadows) {
-      light.shadow.mapSize.set(q.shadows, q.shadows);
+    light.castShadow = size > 0;
+    if (size && light.shadow.mapSize.x !== size) {
+      light.shadow.mapSize.set(size, size);
       light.shadow.map?.dispose();
       light.shadow.map = null;
     }
@@ -679,9 +690,12 @@ export class World {
     const roller = this.well.children.find((c) => c.geometry?.type === 'CylinderGeometry' && Math.abs(c.rotation.z - Math.PI / 2) < 0.01);
     const from = bucket.position.y;
     const to = 0.98 + (cranks / total) * 0.75;
+    // 用明確的起始與目標角度補間（不依每幀回呼次數累加），幀率高低轉的圈數都一樣
+    const rollFrom = roller ? roller.rotation.x : 0;
+    const rollTo = rollFrom + Math.PI * 1.5;
     return this.tweens.add(0.5, (k) => {
       bucket.position.y = from + (to - from) * k;
-      if (roller) roller.rotation.x += 0.2;
+      if (roller) roller.rotation.x = rollFrom + (rollTo - rollFrom) * k;
     });
   }
 

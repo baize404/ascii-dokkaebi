@@ -5,9 +5,14 @@ export const SETTINGS_SCHEMA = {
   musicVolume: { default: 0.5, type: 'number', min: 0, max: 1 },
   ambienceVolume: { default: 0.6, type: 'number', min: 0, max: 1 },
   sfxVolume: { default: 0.8, type: 'number', min: 0, max: 1 },
-  ascii: { default: true, type: 'boolean' },
-  density: { default: 'normal', type: 'enum', values: ['fine', 'normal', 'coarse'] },
+  renderMode: { default: 'hd', type: 'enum', values: ['pure', 'hd', 'hybrid', '3d'] },
+  density: { default: 'adaptive', type: 'enum', values: ['adaptive', 'classic', 'fine', 'ultra', 'cinematic'] },
+  sampling: { default: 'auto', type: 'enum', values: ['auto', '2', '4', '8'] },
+  glyphShape: { default: 'square', type: 'enum', values: ['square', 'tall'] },
+  glyphWeight: { default: 'bold', type: 'enum', values: ['normal', 'bold'] },
   quality: { default: 'auto', type: 'enum', values: ['auto', 'low', 'medium', 'high'] },
+  pixelRatio: { default: 'auto', type: 'enum', values: ['auto', '1', '1.5', '2'] },
+  shadows: { default: 'auto', type: 'enum', values: ['auto', 'off', 'low', 'high'] },
   uiScale: { default: 'normal', type: 'enum', values: ['small', 'normal', 'large'] },
   cameraShake: { default: true, type: 'boolean' },
   reduceMotion: { default: false, type: 'boolean' },
@@ -23,6 +28,14 @@ function validate(key, value) {
   return undefined;
 }
 
+/** 舊版（2.x）設定轉換成新的選項 */
+export function migrate(saved) {
+  if (typeof saved.ascii === 'boolean' && saved.renderMode === undefined) saved.renderMode = saved.ascii ? 'hd' : '3d';
+  delete saved.ascii;
+  if (saved.density === 'normal' || saved.density === 'coarse') saved.density = 'classic';
+  return saved;
+}
+
 /**
  * 設定管理：讀寫 localStorage、驗證數值、變更時通知訂閱者。
  * 事件：settings:change { key, value, all }
@@ -35,6 +48,7 @@ export class Settings {
     try {
       const saved = JSON.parse(this.storage?.getItem(KEY) ?? 'null');
       if (saved && typeof saved === 'object') {
+        migrate(saved);
         for (const [k, v] of Object.entries(saved)) {
           const ok = validate(k, v);
           if (ok !== undefined) this.values[k] = ok;

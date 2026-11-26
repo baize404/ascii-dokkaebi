@@ -1,3 +1,4 @@
+import { preserveMaskBlending, tagObject } from '../render/objectId.js';
 import { Raycaster, Vector2, Vector3 } from 'three';
 import { CODEX } from '../data/codex.js';
 import { heightAt, LEVEL } from '../data/level.js';
@@ -29,6 +30,8 @@ export class Session {
     this.player = new Player(this.world, start, this.nav);
     if (player) this.player.setPosition(player.x, player.z, player.yaw);
     this.player.onStep = (surface) => game.audio.sfx.step(surface);
+    tagObject(this.player.object, 'character');
+    preserveMaskBlending(this.player.object);
     this.explored = new ExploredGrid(extra.explored);
     this.tutorial = new Set(Array.isArray(extra.tutorial) ? extra.tutorial : []);
     this.busy = false;
@@ -210,10 +213,37 @@ export class Session {
 
   // ---------- 互動 ----------
 
-  tryInteract(id = this.nearest?.id) {
+  /**
+   * 目前的互動狀態：Exploring、Navigating、Interacting、Animating、Dialogue、Puzzle、Paused、Cutscene、Ending。
+   * 互動只會從 Exploring／Navigating 開始，其他狀態下的輸入一律忽略，避免重複觸發。
+   */
+  get phase() {
     const g = this.game;
-    if (!id || this.busy || g.mode !== 'playing' || g.dialogue.isOpen || g.panels.isOpen) return;
+    if (g.mode === 'ending') return 'Ending';
+    if (g.mode === 'cutscene') return 'Cutscene';
+    if (g.panels.isOpen) return 'Paused';
+    if (this.shellPickable) return 'Puzzle';
+    if (g.dialogue.isOpen) return 'Dialogue';
+    if (this.busy) return this.player.acting ? 'Animating' : 'Interacting';
+    if (this.player.target) return 'Navigating';
+    return 'Exploring';
+  }
+
+  get canInteract() {
+    return this.phase === 'Exploring' || this.phase === 'Navigating';
+  }
+
+  tryInteract(id = this.nearest?.id) {
+    if (!this.canInteract) return false;
+    if (!id) {
+      // 按了互動鍵但旁邊沒有東西：附近有可互動物件就提醒靠近一點
+      const p = this.player.position;
+      const close = this.world.activeInteractables().some((it) => Math.hypot(it.x - p.x, it.z - p.z) < it.radius + 2.5);
+      if (close) this.game.hud.toast('請靠近物件再互動。');
+      return false;
+    }
     this.#run(id);
+    return true;
   }
 
   async #run(id) {
@@ -230,7 +260,9 @@ export class Session {
     try {
       await this.#dispatch(id);
     } catch (err) {
+      // 開發者看 Console；玩家看到恢復訊息，狀態已提交的部分保留、畫面回到可操作
       console.error('互動發生錯誤：', err);
+      this.#recover();
     } finally {
       this.busy = false;
       g.rig.setFocus(false);
@@ -240,6 +272,19 @@ export class Session {
         this.#afterChange();
       }
     }
+  }
+
+  /** 互動中途出錯時把畫面恢復到可以繼續玩的狀態 */
+  #recover() {
+    const g = this.game;
+    g.dialogue.reset?.();
+    this.player.stop();
+    this.shellPickable = false;
+    if (g.mode === 'cutscene' && !this.state.flags.finished) {
+      g.cutscene.end();
+      g.setMode('playing');
+    }
+    g.hud.toast('剛才的動作沒有完成，已經恢復，可以再試一次。');
   }
 
   #dispatch(id) {
@@ -285,8 +330,11 @@ export class Session {
     if (this.busy) return;
     this.busy = true;
     const item = ITEMS[id];
-    await this.game.dialogue.say([{ speaker: 'narrator', text: `${item.name}（${item.note}）：${item.desc}` }]);
-    this.busy = false;
+    try {
+      await this.game.dialogue.say([{ speaker: 'narrator', text: `${item.name}（${item.note}）：${item.desc}` }]);
+    } finally {
+      this.busy = false;
+    }
   }
 
   /** 從背包「使用」道具：對著附近的互動對象使用，沒有適合的對象就提示 */
@@ -340,7 +388,7 @@ export class Session {
       if (slot !== null) g.dialogue.externalPick(slot);
       return;
     }
-    if (g.mode !== 'playing' || this.busy || g.dialogue.isOpen) return;
+    if (!this.canInteract) return;
     const hit = this.raycaster.intersectObjects(this.world.pickables, true)[0];
     if (!hit) return;
     let obj = hit.object;
@@ -348,20 +396,51 @@ export class Session {
     const id = obj?.userData.interactId;
     const it = id ? this.world.interactable(id) : null;
     if (it && !(id === 'cat' && this.state.flags.catStage >= 3)) {
-      const res = this.player.walkTo(it.position, () => this.tryInteract(id), Math.min(0.9, it.radius * 0.6));
-      if (!res.ok) this.#blocked(hit.point);
-      else this.world.showTap(it.position);
+      const gate = this.world.blockedReason?.(id);
+      if (gate) return this.#blocked(it.position, gate);
+      const res = this.player.walkTo(it.position, () => this.#arrive(id, true), Math.min(0.9, it.radius * 0.6), () => this.#blocked(it.position, 'blocked'));
+      if (!res.ok) this.#blocked(hit.point, this.#unreachableReason(it.position));
+      else if (!res.reached) {
+        // 走不進互動範圍（例如被금줄擋住）：先說明原因，走到最近的地方後不自動互動
+        this.player.onArrive = () => this.#arrive(id, false);
+        this.#blocked(it.position, this.#unreachableReason(it.position, 'near'));
+      } else this.world.showTap(it.position);
       return;
     }
-    const res = this.player.walkTo(hit.point);
-    if (!res.ok) this.#blocked(hit.point);
-    else this.world.showTap(res.reached ? hit.point : this.player.target ?? hit.point, false);
+    const res = this.player.walkTo(hit.point, null, undefined, () => this.#blocked(hit.point, 'blocked'));
+    if (!res.ok) this.#blocked(hit.point, this.#unreachableReason(hit.point));
+    else {
+      this.world.showTap(res.reached ? hit.point : this.player.target ?? hit.point, false);
+      if (!res.reached) this.game.hud.toast('那裡過不去，先走到最近的地方。');
+    }
   }
 
-  #blocked(point) {
+  /** 尋路結束：確認真的站進互動範圍才互動，只走到附近就提示 */
+  #arrive(id, announce) {
+    const it = this.world.interactable(id);
+    if (!it) return;
+    const p = this.player.position;
+    if (Math.hypot(it.x - p.x, it.z - p.z) <= it.radius) this.tryInteract(id);
+    else if (announce) this.#blocked(it.position, 'near');
+  }
+
+  #unreachableReason(point, fallback = 'unreachable') {
+    const m = LEVEL.mound;
+    if (!this.state.flags.ropeOpen && Math.hypot(point.x - m.x, point.z - m.z) < m.wallRadius + 0.5) return 'rope';
+    return fallback;
+  }
+
+  #blocked(point, reason = 'unreachable') {
+    const text = {
+      unreachable: '這裡無法到達。',
+      blocked: '道路被阻擋。',
+      near: '請靠近物件再互動。',
+      rope: '山丘被금줄攔住了，得先想辦法打開。',
+      door: '需要先打開木門。',
+    }[reason] ?? reason;
     this.world.showTap(point, true);
     this.game.audio.sfx.play('blocked');
-    this.game.hud.toast('那裡走不過去');
+    this.game.hud.toast(text);
   }
 
   // ---------- HUD、地圖、存檔 ----------

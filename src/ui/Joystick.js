@@ -51,6 +51,13 @@ export class Joystick {
     this.onChange({ x: dx / RADIUS, y: -dy / RADIUS });
   }
 
+  /** 放開搖桿（視窗失焦、切到背景時） */
+  reset() {
+    this.pointer = null;
+    this.knob.style.transform = '';
+    this.onChange({ x: 0, y: 0 });
+  }
+
   show(visible) {
     this.el.hidden = !visible;
     if (!visible) this.onChange({ x: 0, y: 0 });

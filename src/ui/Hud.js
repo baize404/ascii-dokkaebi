@@ -71,6 +71,7 @@ export class Hud {
   /** 短暫通知（依序排隊顯示）；icon 是道具的 ASCII 圖示 */
   toast(message, icon = null) {
     this.queue ??= [];
+    this.log = [...(this.log ?? []), message].slice(-30); // 最近的通知（測試與除錯用）
     if (this.queue.some((q) => q.message === message)) return;
     this.queue.push({ message, icon });
     if (!this.showing) this.#nextToast();
@@ -106,8 +107,10 @@ export class Hud {
     this.badge.hidden = !on;
   }
 
-  setFps(fps) {
+  setFps(fps, layout = null) {
     this.fpsEl.hidden = fps === null;
-    if (fps !== null) this.fpsEl.textContent = `${fps.toFixed(0)} FPS`;
+    if (fps === null) return;
+    const grid = layout ? ` · ${layout.cols}×${layout.rows} 格 ×${layout.samples}` : '';
+    this.fpsEl.textContent = `${fps.toFixed(0)} FPS · ${(1000 / Math.max(fps, 1)).toFixed(1)} ms${grid}`;
   }
 }
