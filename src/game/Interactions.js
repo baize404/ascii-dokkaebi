@@ -40,12 +40,14 @@ export class Interactions {
 
   #gotItem(itemId) {
     const item = ITEMS[itemId];
+    this.bus.emit('sfx', 'item');
     this.hud.toast(`取得：${item.name}（${item.note}）`);
   }
 
   async #storehouse() {
     const result = this.quest.useStorehouse();
     if (result === 'opened') {
+      this.bus.emit('sfx', 'door');
       await this.world.openStorehouse();
       await this.dialogue.say(SCRIPT.storehouse.opened);
       this.#gotItem('makgeolli');
@@ -67,9 +69,11 @@ export class Interactions {
     if (result === 'reset') {
       // 先讓這盞亮一下，再全部熄滅
       this.world.syncLanterns([...this.world.litSeasons(), season]);
+      this.bus.emit('sfx', 'reset');
       await this.dialogue.say(L.reset);
     }
     this.world.syncLanterns(this.quest.lanterns.lit);
+    if (result === 'lit' || result === 'complete') this.bus.emit('sfx', 'lantern');
     if (result === 'lit') await this.dialogue.say(L.lit);
     if (result === 'complete') await this.dialogue.say(L.complete);
   }
@@ -89,6 +93,7 @@ export class Interactions {
     if (res.status === 'offered') {
       this.world.showOfferings();
       await this.dialogue.say(SCRIPT.altar.offer);
+      this.bus.emit('sfx', 'dokkaebi');
       await this.world.spawnDokkaebi();
       await this.dialogue.say(SCRIPT.dokkaebi.appear);
     }
@@ -103,6 +108,7 @@ export class Interactions {
       );
       const result = this.quest.answerRiddle(choice);
       this.hud.refresh();
+      this.bus.emit('sfx', result === 'wrong' ? 'wrong' : 'correct');
       if (result === 'wrong') await this.dialogue.say(SCRIPT.dokkaebi.wrong);
       if (result === 'next') await this.dialogue.say(SCRIPT.dokkaebi.correct);
     }
@@ -110,6 +116,7 @@ export class Interactions {
     await this.dialogue.say(SCRIPT.dokkaebi.solved);
     // 鏡頭拉到廣場，看月亮從老樹後面升起
     this.rig.shot(new Vector3(3, 5, 1), new Vector3(0, 16, -60));
+    this.bus.emit('sfx', 'moon');
     await this.world.returnMoon();
     await this.dialogue.say(SCRIPT.dokkaebi.farewell);
     await this.world.hideDokkaebi();

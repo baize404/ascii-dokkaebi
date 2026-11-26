@@ -81,6 +81,7 @@ async function run({ name, ...context }, browser, url) {
   await page.waitForTimeout(800);
   let s = await state(page);
   check(s.state === 'playing', '按開始後進入遊戲');
+  check(s.marker && Math.abs(s.marker.z - 19) < 0.1, '開場有引導光點指向장승');
 
   // 移動：鍵盤
   if (!touch) {
@@ -142,6 +143,7 @@ async function run({ name, ...context }, browser, url) {
   for (const season of ['spring', 'summer', 'autumn', 'winter']) await light(season);
   s = await state(page);
   check(s.lanternsLit.length === 4 && s.worldLanternsLit.length === 4, '依序點亮四座石燈');
+  check(s.marker && Math.abs(s.marker.z + 15.6) < 0.1, '條件備妥後引導光點移到祭壇');
   await page.screenshot({ path: join(shots, `${name}-3-lanterns.png`) });
 
   // 祭壇 → 도깨비 → 猜謎（第一題先答錯一次）

@@ -12,13 +12,20 @@ export class Hud {
     this.promptBtn = document.getElementById('prompt');
     this.toastEl = document.getElementById('toast');
     this.asciiBtn = document.getElementById('btn-ascii');
+    this.soundBtn = document.getElementById('btn-sound');
     this.toastTimer = 0;
     this.promptLabel = '';
+    // 觸控裝置沒有 E 鍵，提示改成「點這裡」
+    this.keyHint = window.matchMedia?.('(pointer: coarse)').matches ? '點這裡：' : '[E]';
 
     this.promptBtn.addEventListener('click', () => bus.emit('ui:interact'));
     this.asciiBtn.addEventListener('click', (e) => {
       e.currentTarget.blur();
       bus.emit('input:toggleAscii');
+    });
+    this.soundBtn.addEventListener('click', (e) => {
+      e.currentTarget.blur();
+      bus.emit('input:toggleSound');
     });
     document.getElementById('btn-help').addEventListener('click', (e) => {
       e.currentTarget.blur();
@@ -66,7 +73,13 @@ export class Hud {
     if (label === this.promptLabel) return;
     this.promptLabel = label;
     this.promptBtn.hidden = !label;
-    if (label) this.promptBtn.textContent = `[E] ${label}`;
+    if (label) this.promptBtn.textContent = `${this.keyHint} ${label}`;
+  }
+
+  setSoundState(muted) {
+    this.soundBtn.textContent = muted ? '♪̸' : '♪';
+    this.soundBtn.classList.toggle('off', muted);
+    this.soundBtn.title = muted ? '音效已關閉（M）' : '音效開關（M）';
   }
 
   setAsciiState(on) {

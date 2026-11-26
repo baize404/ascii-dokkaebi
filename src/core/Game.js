@@ -1,5 +1,6 @@
 import { PerspectiveCamera, Raycaster, Vector2 } from 'three';
 import { LEVEL } from '../data/level.js';
+import { Sfx } from '../audio/Sfx.js';
 import { RIDDLES } from '../data/script.js';
 import { CameraRig } from '../game/CameraRig.js';
 import { Interactions } from '../game/Interactions.js';
@@ -28,6 +29,7 @@ export class Game {
     this.dialogue = new Dialogue(this.bus);
     this.screens = new Screens(this.bus);
     this.raycaster = new Raycaster();
+    this.sfx = new Sfx(this.bus);
 
     this.state = 'title';
     this.busy = false;
@@ -38,6 +40,7 @@ export class Game {
     this.hud = new Hud({ quest: this.quest, bus: this.bus });
     this.#wireInteractions();
     this.hud.refresh();
+    this.hud.setSoundState(this.sfx.muted);
 
     this.renderer.onResize = (w, h) => this.rig.setAspect(w / h);
     this.renderer.resize();
@@ -77,6 +80,7 @@ export class Game {
       this.hud.setAsciiState(this.renderer.asciiEnabled);
     });
     bus.on('input:help', () => this.screens.showHelp(!this.screens.helpOpen));
+    bus.on('input:toggleSound', () => this.hud.setSoundState(this.sfx.toggle()));
     bus.on('game:complete', () => this.#finish());
   }
 
@@ -91,6 +95,16 @@ export class Game {
     this.rig.follow(this.player.position, true);
     this.quest.stats.startedAt = performance.now();
     this.hud.toast('先到村口找장승（守護柱）問問看');
+    this.#updateMarker();
+  }
+
+  /** 引導光點：開場指向장승；供品與石燈都備妥後指向祭壇。 */
+  #updateMarker() {
+    const { flags } = this.quest;
+    let target = null;
+    if (!flags.readStele) target = LEVEL.markers.stele;
+    else if (!flags.offered && this.quest.missingForAltar().length === 0) target = LEVEL.markers.altar;
+    this.world.setMarker(target);
   }
 
   restart() {
@@ -140,6 +154,7 @@ export class Game {
     } finally {
       this.busy = false;
       this.hud.refresh();
+      this.#updateMarker();
       if (this.state === 'playing') this.rig.follow(this.player.position);
     }
   }
@@ -205,6 +220,8 @@ export class Game {
         flags: { ...this.quest.flags },
         stats: { ...this.quest.stats },
         ascii: this.renderer.asciiEnabled,
+        marker: this.world.marker.visible ? { x: this.world.markerBase.x, z: this.world.markerBase.z } : null,
+        muted: this.sfx.muted,
       }),
       interactables: () => this.world.interactables.map(({ id, x, z }) => ({ id, x, z })),
       teleport: (x, z) => this.player.setPosition(x, z),

@@ -53,19 +53,32 @@ export class Dialogue {
     this.#open();
     this.#renderLine(line);
     this.hintEl.hidden = true;
-    const index = await new Promise((resolve) => {
-      choices.forEach((label, i) => {
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'choice';
-        btn.textContent = `${i + 1}. ${label}`;
-        btn.addEventListener('click', (e) => {
-          e.stopPropagation();
-          resolve(i);
-        });
-        this.choicesEl.append(btn);
-      });
+    let pick;
+    const picked = new Promise((resolve) => {
+      pick = resolve;
     });
+    choices.forEach((label, i) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'choice';
+      btn.textContent = `${i + 1}. ${label}`;
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        pick(i);
+      });
+      this.choicesEl.append(btn);
+    });
+    // 鍵盤也可以用數字鍵選
+    const onKey = (e) => {
+      const n = Number.parseInt(e.key, 10);
+      if (n >= 1 && n <= choices.length) {
+        e.preventDefault();
+        pick(n - 1);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    const index = await picked;
+    window.removeEventListener('keydown', onKey);
     this.choicesEl.replaceChildren();
     this.#close();
     return index;

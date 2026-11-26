@@ -59,6 +59,8 @@ export class Input {
       this.bus.emit('input:toggleAscii');
     } else if (e.code === 'KeyH') {
       this.bus.emit('input:help');
+    } else if (e.code === 'KeyM') {
+      this.bus.emit('input:toggleSound');
     }
   }
 

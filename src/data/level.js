@@ -26,6 +26,11 @@ export const LEVEL = {
     { season: 'winter', x: -3.6, z: -12 },
     { season: 'summer', x: 3.6, z: -12 },
   ],
+  /** 引導光點（只在關鍵時刻出現，不會劇透謎題） */
+  markers: {
+    stele: { x: 0, y: 4.3, z: 19 },
+    altar: { x: 0, y: 2.6, z: -15.6 },
+  },
   shrine: { x: 0, z: -20 },
   altar: { x: 0, z: -15.6 },
   jars: { x: -14, z: 12.5 },

@@ -3,8 +3,11 @@ import {
   Color,
   DirectionalLight,
   FogExp2,
+  Group,
   HemisphereLight,
   Mesh,
+  MeshBasicMaterial,
+  OctahedronGeometry,
   PlaneGeometry,
   Scene,
   SphereGeometry,
@@ -84,6 +87,13 @@ export class World {
     this.moon.position.copy(MOON_FROM);
     this.moon.visible = false;
     this.scene.add(this.moon);
+
+    // 引導光點：一顆旋轉的黃色菱形
+    this.marker = new Group();
+    this.marker.add(new Mesh(new OctahedronGeometry(0.5, 0), new MeshBasicMaterial({ color: 0xffd36e })));
+    this.marker.visible = false;
+    this.markerBase = new Vector3();
+    this.scene.add(this.marker);
   }
 
   #buildGround() {
@@ -237,6 +247,12 @@ export class World {
 
   // ---------- 場景效果 ----------
 
+  /** 把引導光點移到 pos 上方；傳 null 隱藏。 */
+  setMarker(pos) {
+    this.marker.visible = Boolean(pos);
+    if (pos) this.markerBase.set(pos.x, pos.y, pos.z);
+  }
+
   litSeasons() {
     return [...this.lanterns].filter(([, lantern]) => lantern.lit).map(([season]) => season);
   }
@@ -299,6 +315,12 @@ export class World {
       const { phase, radius, height } = w.userData;
       const a = t * 0.6 + phase;
       w.position.set(altar.x + Math.cos(a) * radius, height + Math.sin(t * 2 + phase) * 0.3, altar.z - 2 + Math.sin(a) * radius * 0.7);
+    }
+
+    if (this.marker.visible) {
+      this.marker.position.copy(this.markerBase);
+      this.marker.position.y += Math.sin(t * 3) * 0.3;
+      this.marker.rotation.y = t * 2;
     }
 
     const d = this.dokkaebi;

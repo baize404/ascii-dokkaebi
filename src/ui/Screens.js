@@ -1,5 +1,20 @@
 import { textToAscii } from './asciiTitle.js';
 
+const BEST_KEY = 'ascii-dokkaebi.best-seconds';
+const formatTime = (s) => `${Math.floor(s / 60)} 分 ${String(s % 60).padStart(2, '0')} 秒`;
+
+/** 讀取並更新最佳紀錄（秒），回傳 { best, isNew }。 */
+function recordBest(seconds) {
+  try {
+    const prev = Number(localStorage.getItem(BEST_KEY));
+    const isNew = !(prev > 0) || seconds < prev;
+    if (isNew) localStorage.setItem(BEST_KEY, String(seconds));
+    return { best: isNew ? seconds : prev, isNew };
+  } catch {
+    return { best: seconds, isNew: false };
+  }
+}
+
 /**
  * 全螢幕畫面：標題、操作說明、結局。
  * 事件：ui:start、ui:restart
@@ -42,10 +57,11 @@ export class Screens {
   }
 
   showEnd(stats) {
-    const seconds = Math.round((stats.finishedAt - stats.startedAt) / 1000);
-    const time = `${Math.floor(seconds / 60)} 分 ${String(seconds % 60).padStart(2, '0')} 秒`;
+    const seconds = Math.max(1, Math.round((stats.finishedAt - stats.startedAt) / 1000));
+    const { best, isNew } = recordBest(seconds);
     const rows = [
-      ['花費時間', time],
+      ['花費時間', formatTime(seconds)],
+      ['最佳紀錄', isNew ? `${formatTime(best)}（新紀錄！）` : formatTime(best)],
       ['互動次數', `${stats.interactions} 次`],
       ['失誤次數', `${stats.mistakes} 次`],
     ];
