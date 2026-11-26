@@ -95,7 +95,11 @@ tests/
 
 ## 部署
 
-推到 `main` 後，GitHub Actions（`.github/workflows/deploy.yml`）會跑單元測試、打包，並部署到 GitHub Pages。第一次部署前，需要到 repo 的 **Settings → Pages → Source** 選 **GitHub Actions**。
+推到 `main` 後，GitHub Actions（`.github/workflows/deploy.yml`）會跑單元測試、打包，並部署到 GitHub Pages。第一次部署前，需要到 repo 的 **Settings → Pages → Build and deployment → Source** 選 **GitHub Actions**。
+
+> 注意：Source 不能選「Deploy from a branch」。那樣 GitHub 會直接發佈還沒打包的原始碼，網頁會找不到 `/src/main.js`，只顯示「遊戲載入失敗」。
+
+如果主程式載入失敗，或瀏覽器不支援 WebGL 2，網頁會顯示中文說明，而不是一片空白。
 
 ## 授權與來源
 

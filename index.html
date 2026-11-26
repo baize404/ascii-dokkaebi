@@ -7,6 +7,22 @@
     <title>달 도둑 도깨비 · ASCII Dokkaebi</title>
     <meta name="description" content="用 ASCII 字元渲染的 3D 探索解謎小遊戲：在沒有月亮的夜晚，找回被도깨비偷走的月亮。" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <script>
+      // 主程式載入失敗（例如網站還在部署、網路中斷）時，顯示說明而不是一頁沒有樣式的文字
+      window.addEventListener(
+        'error',
+        function (e) {
+          if (e.target && e.target.tagName === 'SCRIPT') {
+            var box = document.getElementById('boot-error');
+            if (box) {
+              box.hidden = false;
+              box.style.display = 'flex';
+            }
+          }
+        },
+        true,
+      );
+    </script>
   </head>
   <body>
     <div id="app">
@@ -88,6 +104,18 @@
           <div class="actions"><button id="btn-restart" type="button" class="primary">↻ 再玩一次</button></div>
         </div>
       </section>
+    </div>
+
+    <!-- 載入失敗時的說明（不依賴外部 CSS，才能在樣式也載不到時正常顯示） -->
+    <div
+      id="boot-error"
+      hidden
+      style="position: fixed; inset: 0; z-index: 100; align-items: center; justify-content: center; padding: 24px; background: #000; color: #cfe3ff; font-family: monospace; text-align: center; line-height: 1.8"
+    >
+      <div>
+        <p style="color: #ffc46e; font-size: 1.15rem; margin: 0 0 0.6em">遊戲載入失敗</p>
+        <p id="boot-error-detail" style="margin: 0">遊戲程式沒有成功載入。請重新整理頁面；如果還是不行，網站可能正在更新，請稍後再試。</p>
+      </div>
     </div>
     <script type="module" src="/src/main.js"></script>
   </body>
