@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#000000" />
+    <title>달 도둑 도깨비 · ASCII Dokkaebi</title>
+    <meta name="description" content="用 ASCII 字元渲染的 3D 探索解謎小遊戲：在沒有月亮的夜晚，找回被도깨비偷走的月亮。" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="view" aria-label="遊戲畫面"></canvas>
+
+      <!-- 遊戲中 HUD -->
+      <div id="hud" class="hud" hidden>
+        <section class="panel objectives" aria-label="任務">
+          <h2>任務</h2>
+          <ul id="objective-list"></ul>
+        </section>
+        <section class="panel inventory" aria-label="背包">
+          <h2>背包</h2>
+          <ul id="inventory-list"></ul>
+        </section>
+        <div class="toolbar">
+          <button id="btn-ascii" type="button" title="切換 ASCII／原始畫面（T）">ASCII</button>
+          <button id="btn-help" type="button" title="操作說明（H）">?</button>
+        </div>
+        <button id="prompt" class="prompt" type="button" hidden></button>
+        <div id="toast" class="toast" role="status" aria-live="polite"></div>
+      </div>
+
+      <!-- 對話框：整個畫面都可以點一下繼續 -->
+      <div id="dialogue" class="dialogue-layer" hidden>
+        <div class="dialogue panel" role="dialog" aria-live="polite">
+          <div class="speaker" id="dialogue-speaker"></div>
+          <p class="text" id="dialogue-text"></p>
+          <div class="choices" id="dialogue-choices"></div>
+          <div class="hint" id="dialogue-hint">點一下或按 Space 繼續 ▸</div>
+        </div>
+      </div>
+
+      <!-- 標題畫面 -->
+      <section id="screen-title" class="screen">
+        <div class="screen-inner">
+          <pre class="ascii-title" id="ascii-title" aria-label="도깨비"></pre>
+          <p class="subtitle">달 도둑 도깨비 ── 偷走月亮的도깨비</p>
+          <p class="story">今晚的山村沒有月亮。<br />提著燈籠的你，要找出是誰把月亮藏了起來。</p>
+          <div class="actions">
+            <button id="btn-start" type="button" class="primary">▶ 開始遊戲</button>
+            <button id="btn-title-help" type="button">操作說明</button>
+          </div>
+          <p class="credit">ASCII 3D renderer · Three.js · 原創作品</p>
+        </div>
+      </section>
+
+      <!-- 操作說明 -->
+      <section id="screen-help" class="screen" hidden>
+        <div class="screen-inner panel">
+          <h2>操作說明</h2>
+          <dl class="controls">
+            <dt>移動</dt><dd>WASD／方向鍵，或點擊地面</dd>
+            <dt>互動</dt><dd>E／Space，或直接點物件、按「互動」按鈕</dd>
+            <dt>對話</dt><dd>點一下畫面或按 Space 繼續</dd>
+            <dt>畫面</dt><dd>T 切換 ASCII 與原始 3D 畫面</dd>
+          </dl>
+          <p class="tip">提示：先到村口找장승（守護柱）問問看。</p>
+          <div class="actions"><button id="btn-help-close" type="button" class="primary">知道了</button></div>
+        </div>
+      </section>
+
+      <!-- 結局 -->
+      <section id="screen-end" class="screen" hidden>
+        <div class="screen-inner panel">
+          <pre class="ascii-moon" aria-hidden="true">
+      .-""""-.
+    .'        '.
+   /    .--.    \
+  |    (    )    |
+   \    '--'    /
+    '.        .'
+      '-....-'</pre>
+          <h2>月亮回來了</h2>
+          <p>도깨비心滿意足地抱著메밀묵消失在老樹後面。<br />山村又被月光照亮了。</p>
+          <dl class="stats" id="end-stats"></dl>
+          <div class="actions"><button id="btn-restart" type="button" class="primary">↻ 再玩一次</button></div>
+        </div>
+      </section>
+    </div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

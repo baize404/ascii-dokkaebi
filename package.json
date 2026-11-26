@@ -1,0 +1,23 @@
+{
+  "name": "ascii-dokkaebi",
+  "version": "1.0.0",
+  "description": "달 도둑 도깨비 — ASCII 渲染的 3D 探索解謎網頁遊戲",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview --port 4173",
+    "test": "vitest run",
+    "test:e2e": "node tests/e2e/playthrough.mjs"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "three": "^0.187.0"
+  },
+  "devDependencies": {
+    "playwright-core": "^1.65.1",
+    "vite": "^8.4.0",
+    "vitest": "^5.1.2"
+  },
+  "private": true,
+  "type": "module"
+}
