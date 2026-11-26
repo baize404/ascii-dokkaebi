@@ -2,6 +2,7 @@ import { PerspectiveCamera, Raycaster, Vector2 } from 'three';
 import { LEVEL } from '../data/level.js';
 import { Sfx } from '../audio/Sfx.js';
 import { RIDDLES } from '../data/script.js';
+import { updatePointScale } from '../world/Particles.js';
 import { CameraRig } from '../game/CameraRig.js';
 import { Interactions } from '../game/Interactions.js';
 import { Player } from '../game/Player.js';
@@ -147,12 +148,15 @@ export class Game {
   async #runInteraction(id) {
     this.busy = true;
     this.player.stop();
+    this.player.faceTowards(this.world.facePoint(id));
     this.input.clear();
     this.hud.setPrompt('');
+    this.rig.setFocus(true);
     try {
       await this.interactions.run(id);
     } finally {
       this.busy = false;
+      this.rig.setFocus(false);
       this.hud.refresh();
       this.#updateMarker();
       if (this.state === 'playing') this.rig.follow(this.player.position);
@@ -202,6 +206,7 @@ export class Game {
 
     this.world.update(dt);
     this.rig.update(dt);
+    updatePointScale(this.world.pointMaterials, this.renderer.sceneHeight, this.camera.fov);
     this.renderer.render(this.world.scene, this.camera);
   }
 

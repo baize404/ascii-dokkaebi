@@ -1,4 +1,5 @@
 import {
+  BoxGeometry,
   ConeGeometry,
   CylinderGeometry,
   Group,
@@ -17,7 +18,21 @@ function at(mesh, x, y, z) {
   return mesh;
 }
 
-/** 提著燈籠的孩子（玩家）。模型正面朝 +z。 */
+/** 以肩膀為支點的手臂（往下垂），旋轉 x 就能前後擺動 */
+function makeArm(x, material) {
+  const pivot = new Group();
+  pivot.position.set(x, 1.27, 0);
+  const geom = new CylinderGeometry(0.06, 0.07, 0.42, 6);
+  geom.translate(0, -0.21, 0);
+  pivot.add(new Mesh(geom, material));
+  pivot.add(at(new Mesh(new SphereGeometry(0.065, 6, 5), mats.skin), 0, -0.44, 0));
+  return pivot;
+}
+
+/**
+ * 提著燈籠的孩子（玩家）。模型正面朝 +z。
+ * 回傳可以動的部位：body（上下晃、前傾）、head、手臂、腳、緞帶、燈籠。
+ */
 export function makePlayerModel() {
   const root = new Group();
   const body = new Group();
@@ -25,9 +40,35 @@ export function makePlayerModel() {
 
   body.add(at(new Mesh(new ConeGeometry(0.46, 0.95, 10), mats.robe), 0, 0.48, 0));
   body.add(at(new Mesh(new CylinderGeometry(0.2, 0.28, 0.42, 10), mats.jeogori), 0, 1.1, 0));
-  body.add(at(new Mesh(new SphereGeometry(0.27, 12, 10), mats.skin), 0, 1.55, 0));
-  body.add(at(new Mesh(new SphereGeometry(0.29, 10, 8, 0, Math.PI * 2, 0, Math.PI * 0.55), mats.hair), 0, 1.58, -0.02));
-  body.add(at(new Mesh(new SphereGeometry(0.1, 6, 6), mats.hair), 0, 1.5, -0.3));
+  // 衣帶（고름）
+  body.add(at(new Mesh(new CylinderGeometry(0.03, 0.03, 0.3, 4), new MeshLambertMaterial({ color: 0x3a5fc8 })), 0.08, 1.02, 0.25));
+
+  const head = new Group();
+  head.position.set(0, 1.55, 0);
+  head.add(new Mesh(new SphereGeometry(0.27, 12, 10), mats.skin));
+  head.add(at(new Mesh(new SphereGeometry(0.29, 10, 8, 0, Math.PI * 2, 0, Math.PI * 0.55), mats.hair), 0, 0.03, -0.02));
+  head.add(at(new Mesh(new SphereGeometry(0.1, 6, 6), mats.hair), 0, -0.05, -0.3));
+  for (const sx of [-1, 1]) head.add(at(new Mesh(new SphereGeometry(0.035, 5, 4), mats.black), sx * 0.09, 0.02, 0.25));
+  // 辮子尾端的紅緞帶（댕기），以後腦為支點擺動
+  const ribbon = new Group();
+  ribbon.position.set(0, -0.08, -0.33);
+  const ribbonGeom = new BoxGeometry(0.09, 0.42, 0.025);
+  ribbonGeom.translate(0, -0.21, 0);
+  ribbon.add(new Mesh(ribbonGeom, new MeshLambertMaterial({ color: 0xd03040 })));
+  head.add(ribbon);
+  body.add(head);
+
+  const leftArm = makeArm(-0.27, mats.jeogori);
+  const rightArm = makeArm(0.27, mats.jeogori);
+  body.add(leftArm, rightArm);
+
+  // 腳（從裙襬下露出來）
+  const feet = [-1, 1].map((sx) => {
+    const foot = at(new Mesh(new SphereGeometry(0.09, 6, 5), mats.darkWood), sx * 0.13, 0.06, 0.05);
+    foot.scale.set(1, 0.7, 1.5);
+    root.add(foot);
+    return foot;
+  });
 
   // 燈籠（청사초롱：上藍下紅）
   const lantern = new Group();
@@ -40,7 +81,7 @@ export function makePlayerModel() {
   lantern.add(light);
   body.add(lantern);
 
-  return { root, body, lantern, light };
+  return { root, body, head, ribbon, leftArm, rightArm, feet, lantern, light };
 }
 
 /** 도깨비：原創造型——藍皮膚、單角、虎紋腰布、拿著방망이。正面朝 +z。 */

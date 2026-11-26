@@ -343,3 +343,16 @@ button.primary {
     font-size: clamp(4px, 2.1vw, 9px);
   }
 }
+
+/* 標題字微微閃爍，像老舊的終端機 */
+.ascii-title {
+  animation: flicker 4s steps(1) infinite;
+}
+
+@keyframes flicker {
+  0%, 100% { opacity: 1; }
+  41% { opacity: 0.86; }
+  42% { opacity: 1; }
+  77% { opacity: 0.92; }
+  78% { opacity: 1; }
+}

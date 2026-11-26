@@ -15,6 +15,7 @@ export class Interactions {
     if (id.startsWith('lantern-')) return this.#lantern(id.slice('lantern-'.length));
     switch (id) {
       case 'stele':
+        this.player.play('interact');
         return this.dialogue.say(SCRIPT.stele[this.quest.readStele()]);
       case 'kitchen':
         return this.#pickup(this.quest.useKitchen(), SCRIPT.kitchen, 'muk');
@@ -23,8 +24,10 @@ export class Interactions {
       case 'storehouse':
         return this.#storehouse();
       case 'house-nw':
+        this.player.play('interact');
         return this.dialogue.say(SCRIPT.houseNw);
       case 'house-se':
+        this.player.play('interact');
         return this.dialogue.say(SCRIPT.houseSe);
       case 'altar':
         return this.#altar();
@@ -34,20 +37,26 @@ export class Interactions {
   }
 
   async #pickup(result, lines, itemId) {
+    this.player.play('interact');
     await this.dialogue.say(lines[result]);
     if (result === 'got') this.#gotItem(itemId);
   }
 
+  /** 取得物品：彎腰撿起、金色光點往上噴、跳出通知 */
   #gotItem(itemId) {
     const item = ITEMS[itemId];
+    this.player.play('pickup');
+    this.world.burst('item', this.player.position.clone().setY(1.0));
     this.bus.emit('sfx', 'item');
     this.hud.toast(`取得：${item.name}（${item.note}）`);
   }
 
   async #storehouse() {
     const result = this.quest.useStorehouse();
+    this.player.play('interact');
     if (result === 'opened') {
       this.bus.emit('sfx', 'door');
+      this.rig.shake(0.12, 0.4);
       await this.world.openStorehouse();
       await this.dialogue.say(SCRIPT.storehouse.opened);
       this.#gotItem('makgeolli');
@@ -62,14 +71,20 @@ export class Interactions {
       await this.dialogue.say(L.alreadyLit(season));
       return;
     }
+    this.player.play('interact');
     const choice = await this.dialogue.choose({ speaker: '旁白', text: L.inspect(season) }, L.choices);
     if (choice !== 0) return;
+    this.player.play('interact');
 
     const result = this.quest.lightLantern(season);
     if (result === 'reset') {
       // 先讓這盞亮一下，再全部熄滅
       this.world.syncLanterns([...this.world.litSeasons(), season]);
       this.bus.emit('sfx', 'reset');
+      await new Promise((r) => setTimeout(r, 250));
+      this.world.syncLanterns([]);
+      this.rig.shake(0.25, 0.45);
+      this.player.play('startle');
       await this.dialogue.say(L.reset);
     }
     this.world.syncLanterns(this.quest.lanterns.lit);
@@ -95,6 +110,9 @@ export class Interactions {
       await this.dialogue.say(SCRIPT.altar.offer);
       this.bus.emit('sfx', 'dokkaebi');
       await this.world.spawnDokkaebi();
+      this.rig.shake(0.45, 0.7);
+      this.player.play('startle');
+      this.world.dokkaebiReact('laugh');
       await this.dialogue.say(SCRIPT.dokkaebi.appear);
     }
 
@@ -109,6 +127,8 @@ export class Interactions {
       const result = this.quest.answerRiddle(choice);
       this.hud.refresh();
       this.bus.emit('sfx', result === 'wrong' ? 'wrong' : 'correct');
+      // 答錯：도깨비捧腹大笑；答對：도깨비嚇一跳往後退
+      this.world.dokkaebiReact(result === 'wrong' ? 'laugh' : result === 'next' ? 'surprised' : 'cheer');
       if (result === 'wrong') await this.dialogue.say(SCRIPT.dokkaebi.wrong);
       if (result === 'next') await this.dialogue.say(SCRIPT.dokkaebi.correct);
     }
@@ -117,6 +137,7 @@ export class Interactions {
     // 鏡頭拉到廣場，看月亮從老樹後面升起
     this.rig.shot(new Vector3(3, 5, 1), new Vector3(0, 16, -60));
     this.bus.emit('sfx', 'moon');
+    this.player.play('cheer');
     await this.world.returnMoon();
     await this.dialogue.say(SCRIPT.dokkaebi.farewell);
     await this.world.hideDokkaebi();

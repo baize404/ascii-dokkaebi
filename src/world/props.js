@@ -5,14 +5,20 @@ import {
   DoubleSide,
   ExtrudeGeometry,
   Group,
+  Color,
+  Euler,
   IcosahedronGeometry,
+  InstancedMesh,
+  Matrix4,
   Mesh,
   MeshBasicMaterial,
   MeshLambertMaterial,
   PointLight,
+  Quaternion,
   Shape,
   SphereGeometry,
   TorusGeometry,
+  Vector3,
 } from 'three';
 import { mats, OBANGSAEK } from './materials.js';
 
@@ -223,6 +229,8 @@ export function makeTree(kind, rand) {
   }
   g.scale.setScalar(s);
   g.rotation.y = rand() * Math.PI * 2;
+  // 隨風搖擺用的參數（World 每幀更新）
+  g.userData.sway = { phase: rand() * Math.PI * 2, amp: 0.025 + rand() * 0.025 };
   return g;
 }
 
@@ -245,9 +253,13 @@ export function makeShrineTree(rand) {
   for (let i = 0; i < 15; i++) {
     const a = (i / 15) * Math.PI * 2;
     const color = OBANGSAEK[i % OBANGSAEK.length];
-    const strip = box(0.16, 0.9 + rand() * 0.5, 0.04, new MeshLambertMaterial({ color }));
+    const len = 0.9 + rand() * 0.5;
+    const geom = new BoxGeometry(0.16, len, 0.04);
+    geom.translate(0, -len / 2, 0); // 支點移到布條頂端
+    const strip = new Mesh(geom, new MeshLambertMaterial({ color }));
     strip.rotation.y = -a;
-    g.add(at(strip, Math.cos(a) * 1.0, 1.85, Math.sin(a) * 1.0));
+    strip.userData.flutter = rand() * Math.PI * 2;
+    g.add(at(strip, Math.cos(a) * 1.0, 2.35, Math.sin(a) * 1.0));
   }
   // 石堆
   for (let i = 0; i < 7; i++) {
@@ -290,6 +302,57 @@ export function makeWallSegment(length, along = 'x') {
   const mesh = box(along === 'x' ? length : 0.8, 1.1, along === 'x' ? 0.8 : length, mats.darkStone);
   mesh.position.y = 0.55;
   return mesh;
+}
+
+/**
+ * 草叢與小花：用 InstancedMesh 一次畫上千片，讓地面在 ASCII 畫面裡有細節。
+ * isFree(x, z) 回傳 false 的位置（建築、小路）不會長草。
+ */
+export function makeGrassField(count, bounds, rand, isFree) {
+  const blade = new ConeGeometry(0.07, 0.5, 3);
+  blade.translate(0, 0.25, 0);
+  const grass = new InstancedMesh(blade, new MeshLambertMaterial({ color: 0xffffff }), count);
+  const flowerCount = Math.round(count / 12);
+  const flowers = new InstancedMesh(new IcosahedronGeometry(0.09, 0), new MeshLambertMaterial({ color: 0xffffff }), flowerCount);
+  const m = new Matrix4();
+  const q = new Quaternion();
+  const e = new Euler();
+  const p = new Vector3();
+  const sc = new Vector3();
+  const greens = [0x2f6a3e, 0x3d7a45, 0x4b8a4a, 0x2a5a38, 0x5a8f4e];
+  const petals = [0xf2b6c8, 0xf4f0e0, 0xe8c84a, 0xb8a0e8];
+  const place = (mesh, n, colors, scaleFn, yOffset) => {
+    let placed = 0;
+    for (let tries = 0; placed < n && tries < n * 6; tries++) {
+      const x = bounds.minX + rand() * (bounds.maxX - bounds.minX);
+      const z = bounds.minZ + rand() * (bounds.maxZ - bounds.minZ);
+      if (!isFree(x, z)) continue;
+      e.set((rand() - 0.5) * 0.5, rand() * Math.PI, (rand() - 0.5) * 0.5);
+      q.setFromEuler(e);
+      const s = scaleFn();
+      m.compose(p.set(x, yOffset, z), q, sc.set(s, s * (0.7 + rand() * 0.8), s));
+      mesh.setMatrixAt(placed, m);
+      mesh.setColorAt(placed, new Color(colors[Math.floor(rand() * colors.length)]));
+      placed++;
+    }
+    mesh.count = placed;
+    mesh.instanceMatrix.needsUpdate = true;
+    mesh.instanceColor.needsUpdate = true;
+  };
+  place(grass, count, greens, () => 0.7 + rand() * 0.9, 0);
+  place(flowers, flowerCount, petals, () => 0.8 + rand() * 0.6, 0.32);
+  const g = new Group();
+  g.add(grass, flowers);
+  return g;
+}
+
+/** 石砌煙囪（굴뚝），煙由 World 的粒子系統噴出 */
+export function makeChimney() {
+  const g = new Group();
+  g.add(at(box(0.8, 0.4, 0.8, mats.darkStone), 0, 0.2, 0));
+  g.add(at(cyl(0.3, 0.38, 2.2, mats.stone, 8), 0, 1.4, 0));
+  g.add(at(cyl(0.36, 0.3, 0.2, mats.darkStone, 8), 0, 2.55, 0));
+  return g;
 }
 
 /** 도깨비불（藍色鬼火） */
