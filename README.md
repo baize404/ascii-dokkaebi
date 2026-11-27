@@ -14,6 +14,23 @@
 - **全村共用的風場**：草、樹、火焰、炊煙一起反應。
 - **鏡頭**：近景、調查特寫和對話鏡頭。
 
+## 下一步：玩法原型「斷橋與燈」（Gate 1）
+
+**試玩：** https://baize404.github.io/ascii-dokkaebi/prototype.html
+
+一段 10 分鐘的灰盒關卡，用來測試新的核心玩法：
+
+- **月魂燈籠**：舉高燈籠，讓隱藏的圖案顯現。
+- **靈視**：看見過去存在的「記憶」，記憶的橋可以走。
+- **峽谷的風**：風會吹熄燈火；可以看煙抓時機，或關上閘門擋風。
+
+在人間，記憶物件只用青色線條字元畫出來，讓 ASCII 也成為解謎線索。正式版遊戲不受影響。
+
+- 設計與判斷：[docs/beyond-the-moon/](docs/beyond-the-moon/)
+  - Gate 0 審查
+  - 原型規格與謎題設計表
+  - 真人試玩流程
+
 | 文件 | 內容 |
 | --- | --- |
 | [docs/CHANGES.md](docs/CHANGES.md) | 版本差異、Bug 清單與修正紀錄 |
@@ -47,6 +64,7 @@ npm test           # 單元測試（Vitest）
 npm run build      # 打包到 dist/
 npm run test:e2e   # 先 build；用本機 Chrome 跑功能情境（可加情境名稱只跑一個，例如 desktopReal）
 npm run test:stability  # 畫面穩定度：鏡頭與角色在各種幀率下不抖動
+npm run test:proto      # Gate 1 原型：真實鍵盤通關、掉落與重試、時機解法、手機版面
 node tests/e2e/blackbox.mjs [keyboard,touch,explorer,newcomer]  # 黑箱模擬玩家：只看畫面文字、不傳送、不用答案介面
 node tests/e2e/record.mjs docs/media [take] [hd|pure|hybrid|3d]  # 逐格錄下實際遊戲動畫
 node tests/e2e/shots.mjs <資料夾> hd:fine,3d:-                  # 固定鏡頭比較截圖
@@ -107,6 +125,7 @@ src/
 │   ├── glyphAtlas.js       依筆畫覆蓋率建立的字元圖集
 │   └── shaders/            reduce、classify、composite、fullscreen
 ├── audio/                  AudioManager（三條音軌）、Sfx、Ambience、Music（全部即時合成）
+├── proto/                  Gate 1 玩法原型：rules（規則，純邏輯）、ProtoWorld（灰盒場景）、main
 ├── ui/                     Hud、Dialogue、Panels（日誌／背包／地圖／設定／圖鑑／成就／暫停）、
 │                           Minimap（迷霧地圖）、Joystick、Cutscene、Screens
 └── styles/main.css         民俗暗黑童話風格的介面

@@ -6,12 +6,13 @@ import { AddEquation, AdditiveBlending, CustomBlending, OneFactor, OneMinusSrcAl
  *   0.0  角色（主角、NPC）→ 輪廓與細小肢體優先保留
  *   0.5  可互動物件
  *   0.75 柔和表面（水面）→ Hybrid 模式用連續光影
+ *   0.95 記憶物件（靈界）→ 人間只用線條字元畫出、靈視時才是實體
  *
  * 做法：在 three 內建材質的 opaque_fragment 片段後面，依材質的 ASCII_ID define 改寫 alpha；
  * 半透明材質改成「只混合顏色、不改 alpha」，避免煙霧與粒子破壞遮罩。
  * 原始 3D 模式下畫布沒有 alpha，這些設定不影響畫面。
  */
-export const OBJECT_ID = Object.freeze({ normal: 1, character: 0, interactable: 0.5, soft: 0.75 });
+export const OBJECT_ID = Object.freeze({ normal: 1, character: 0, interactable: 0.5, soft: 0.75, memory: 0.95 });
 
 let patched = false;
 export function patchObjectIdChunk() {

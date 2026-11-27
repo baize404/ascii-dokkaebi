@@ -75,6 +75,7 @@ export class AsciiPass {
       uIntra: { value: 0.14 },
       uHyst: { value: 0.25 },
       uEdgeKeep: { value: 0.7 },
+      uSpirit: { value: 0 },
       uFar: { value: 400 },
     });
     this.composite = fullscreen(compositeShader, {
@@ -162,6 +163,11 @@ export class AsciiPass {
     this.quad.material = material;
     renderer.setRenderTarget(target);
     renderer.render(this.scene, this.camera);
+  }
+
+  /** 靈視程度 0～1 */
+  setSpirit(v) {
+    this.classify.uniforms.uSpirit.value = v;
   }
 
   /** 鏡頭速度（公尺／秒）→ 0（靜止）～1（移動中） */

@@ -24,6 +24,7 @@ uniform float uIntra;       // 格內不連續門檻
 uniform float uHyst;        // 亮度遲滯（以階為單位）
 uniform float uEdgeKeep;    // 上一幀是輪廓時，強度降到多少以下才取消（鏡頭移動時 = 1，不黏）
 uniform float uFar;
+uniform float uSpirit;      // 靈視 0～1：人間的東西褪成冷色，記憶物件發光
 
 layout(location = 0) out vec4 oGlyph;  // rgb 顯示顏色（sRGB）；a 圖集中的字元編號
 
@@ -47,7 +48,20 @@ void main() {
   vec4 D = texelFetch(tData, cell, 0);
   vec4 prev = texelFetch(tPrev, cell, 0);
   float charCov = C.a;
-  float interCov = D.b;
+  float interCov = max(D.b, 0.0);
+  float memCov = max(-D.b, 0.0);
+  // 記憶物件在人間：只留下沿著輪廓的線條字元（暗青色）。看得到、但還不知道是什麼
+  if (memCov > 0.0 && uSpirit < 0.5) {
+    float m[9];
+    for (int j = -1; j <= 1; j++)
+      for (int i = -1; i <= 1; i++) m[(j + 1) * 3 + (i + 1)] = max(-texelFetch(tData, clamp(cell + ivec2(i, j), ivec2(0), ivec2(uGrid) - 1), 0).b, 0.0);
+    float mx = (m[2] + 2.0 * m[5] + m[8]) - (m[0] + 2.0 * m[3] + m[6]);
+    float my = (m[6] + 2.0 * m[7] + m[8]) - (m[0] + 2.0 * m[1] + m[2]);
+    float ma = mod(atan(my, mx), 3.14159265);
+    float mq = mod(floor(ma / 0.78539816 + 0.5), 4.0);
+    oGlyph = vec4(vec3(0.16, 0.40, 0.45) * (0.75 + memCov), uEdgeStart + mq);
+    return;
+  }
 
   vec3 disp = toSRGB(aces(C.rgb * uExposure));
   float l = luma(disp);
@@ -108,5 +122,12 @@ void main() {
   if (isEdge) tint = clamp(tint * 1.2 + 0.05, 0.0, 1.0);
   // 角色在夜裡也要看得出輪廓：顏色有最低亮度（深色頭髮不會變成一片黑洞）
   if (charCov > 0.0) tint = clamp(max(max(tint, sat * (uGlyphGain + 0.5)), vec3(0.17, 0.16, 0.22)) + 0.03, 0.0, 1.0);
+  // 靈視：人間的東西褪成冷色、變暗；記憶物件發出青色的光
+  if (uSpirit > 0.0) {
+    float lum = dot(tint, vec3(0.299, 0.587, 0.114));
+    vec3 ghost = vec3(0.50, 0.72, 0.95) * lum * 0.8;
+    vec3 memory = max(tint, vec3(0.30, 0.85, 0.95) * (0.45 + lum));
+    tint = mix(tint, memCov > 0.0 ? memory : ghost, uSpirit);
+  }
   oGlyph = vec4(tint, idx);
 }

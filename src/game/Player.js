@@ -41,11 +41,13 @@ export class Player {
     this.onStep = null;
     this.model = makePlayerModel();
     this.animator = this.model.animator;
-    this.animator.heightAt = heightAt;
+    // 地形高度：場景可以提供自己的高度函式（例如原型關卡），沒有時用村子的地形
+    this.heightAt = world.heightAt ?? heightAt;
+    this.animator.heightAt = this.heightAt;
     this.animator.footIK = true;
     this.animator.wind = (p) => world.windAt?.(p) ?? null;
     this.object = this.model.root;
-    this.object.position.set(start.x, heightAt(start.x, start.z), start.z);
+    this.object.position.set(start.x, this.heightAt(start.x, start.z), start.z);
     this.yaw = Math.PI; // 面向北方
     this.targetYaw = this.yaw;
     this.object.rotation.y = this.yaw;
@@ -73,7 +75,7 @@ export class Player {
   }
 
   setPosition(x, z, yaw) {
-    this.object.position.set(x, heightAt(x, z), z);
+    this.object.position.set(x, this.heightAt(x, z), z);
     if (Number.isFinite(yaw)) this.yaw = this.targetYaw = yaw;
     this.yawVel = 0;
     this.pendulum.prev = null;
@@ -205,6 +207,8 @@ export class Player {
       }
     }
 
+    // 場景可以限制速度（例如原型裡走在記憶的橋上要放慢）
+    if (this.speedLimit) speed = Math.min(speed, this.speedLimit);
     // 速度平滑：實際速度朝「想要的速度」收斂，起步、停下、轉彎都不會瞬間改變
     const wantX = dir ? dir.x * speed : 0;
     const wantZ = dir ? dir.z * speed : 0;
@@ -266,7 +270,7 @@ export class Player {
       }
     }
     this.object.rotation.y = this.yaw;
-    this.object.position.y = heightAt(this.position.x, this.position.z);
+    this.object.position.y = this.heightAt(this.position.x, this.position.z);
 
     this.speed = dt > 0 ? moved / dt : 0;
     this.animator.setMove(this.speed, moved, dt);

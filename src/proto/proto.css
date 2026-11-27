@@ -1,0 +1,63 @@
+/* Gate 1 原型的介面：沿用正式版的色票（深夜黑、燈籠金、鬼火青、丹青紅、月光白） */
+:root {
+  --ink: #080d16;
+  --mist: #263c50;
+  --gold: #f2bd68;
+  --ghost: #67c5dc;
+  --red: #d65f4c;
+  --moon: #e2e8ef;
+  --line: rgba(242, 189, 104, 0.45);
+  --safe-top: max(12px, env(safe-area-inset-top));
+  --safe-left: max(14px, env(safe-area-inset-left));
+  --safe-right: max(14px, env(safe-area-inset-right));
+  --safe-bottom: max(14px, env(safe-area-inset-bottom));
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--ink); color: var(--moon); overflow: hidden; touch-action: none;
+  font-family: 'Noto Sans TC', 'PingFang TC', 'Microsoft JhengHei', system-ui, sans-serif; }
+#game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+#hud { position: fixed; inset: 0; pointer-events: none; }
+#hud button, .sheet button { pointer-events: auto; }
+button { font: inherit; color: var(--moon); background: rgba(8, 13, 22, 0.78); border: 1px solid var(--line); border-radius: 4px;
+  min-width: 44px; min-height: 44px; padding: 0.4rem 0.9rem; cursor: pointer; }
+button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+#lamp-status { position: absolute; left: var(--safe-left); top: var(--safe-top); display: flex; align-items: center; gap: 0.5rem;
+  padding: 0.35rem 0.7rem; background: rgba(8, 13, 22, 0.7); border: 1px solid var(--line); border-radius: 4px; font-size: 0.85rem; }
+#lamp-status .flame { width: 12px; height: 18px; border-radius: 50% 50% 45% 45%; background: radial-gradient(circle at 50% 70%, #fff3c8, var(--gold) 45%, var(--red)); }
+#lamp-status.out .flame { background: #3a3f48; }
+#lamp-status .bar { width: 72px; height: 6px; background: #222a36; border-radius: 3px; overflow: hidden; }
+#lamp-status .bar i { display: block; height: 100%; width: 100%; background: var(--gold); transition: width 0.1s linear; }
+#lamp-status.windy .bar i { background: var(--red); }
+#lamp-status .spirit-flag, #lamp-status .wind-flag { display: none; }
+#lamp-status.spirit .spirit-flag { display: inline; color: var(--ghost); }
+#lamp-status.windy .wind-flag { display: inline; color: var(--red); }
+.top-buttons { position: absolute; right: var(--safe-right); top: var(--safe-top); display: flex; gap: 0.4rem; }
+#tip { position: absolute; left: 50%; top: calc(var(--safe-top) + 56px); transform: translateX(-50%); max-width: min(560px, 88vw);
+  padding: 0.6rem 0.9rem; background: rgba(8, 13, 22, 0.85); border: 1px solid var(--gold); border-left: 4px solid var(--red); border-radius: 4px; font-size: 0.95rem; line-height: 1.5; }
+#caption { position: absolute; left: 50%; bottom: calc(var(--safe-bottom) + 150px); transform: translateX(-50%); max-width: min(640px, 90vw);
+  padding: 0.5rem 0.9rem; background: rgba(8, 13, 22, 0.75); border-radius: 4px; text-align: center; line-height: 1.5; }
+#prompt { position: absolute; left: 50%; bottom: calc(var(--safe-bottom) + 92px); transform: translateX(-50%); white-space: pre-line; border-color: var(--gold); }
+#action-buttons { position: absolute; right: var(--safe-right); bottom: var(--safe-bottom); display: flex; gap: 0.5rem; }
+#action-buttons button { min-width: 72px; min-height: 64px; }
+#btn-spirit.on { border-color: var(--ghost); color: var(--ghost); box-shadow: 0 0 12px rgba(103, 197, 220, 0.4); }
+#btn-raise.on { border-color: var(--gold); color: var(--gold); }
+.joystick { position: absolute; left: var(--safe-left); bottom: var(--safe-bottom); width: 132px; height: 132px; border-radius: 50%;
+  border: 1px solid var(--line); background: radial-gradient(circle, rgba(38, 60, 80, 0.45), rgba(8, 13, 22, 0.25)); pointer-events: auto; touch-action: none; }
+.joystick .knob { position: absolute; left: 50%; top: 50%; width: 54px; height: 54px; margin: -27px 0 0 -27px; border-radius: 50%;
+  background: rgba(242, 189, 104, 0.25); border: 1px solid var(--gold); }
+body.touch #prompt { left: auto; right: var(--safe-right); bottom: calc(var(--safe-bottom) + 76px); transform: none; min-width: 104px; min-height: 64px; }
+body.touch #caption { bottom: calc(var(--safe-bottom) + 160px); }
+#fade { position: fixed; inset: 0; background: #000; opacity: 0; pointer-events: none; }
+.sheet { position: fixed; inset: 0; margin: auto; width: min(560px, 92vw); height: fit-content; max-height: 92vh; overflow: auto;
+  padding: 1.4rem 1.6rem; background: rgba(8, 13, 22, 0.94); border: 1px solid var(--line); border-radius: 6px; line-height: 1.6; }
+.sheet h1 { margin: 0 0 0.2rem; font-family: 'Noto Serif TC', serif; color: var(--gold); font-weight: 600; }
+.sheet .sub { margin-top: 0; color: var(--ghost); }
+.sheet table { width: 100%; border-collapse: collapse; margin: 0.8rem 0; font-size: 0.9rem; }
+.sheet th { text-align: left; color: var(--gold); font-weight: 500; padding: 0.25rem 0.5rem 0.25rem 0; white-space: nowrap; }
+.sheet td { padding: 0.25rem 0.5rem; }
+.sheet .muted, .sheet .muted a { color: #8a95a6; font-size: 0.85rem; }
+@media (max-width: 600px) {
+  .keys td:nth-child(2) { display: none; }
+  #action-buttons { bottom: calc(var(--safe-bottom) + 150px); }
+}
+@media (min-width: 601px) { .keys td:nth-child(3) { display: none; } }

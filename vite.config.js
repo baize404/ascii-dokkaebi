@@ -1,3 +1,4 @@
+import { resolve } from 'node:path';
 import { defineConfig } from 'vite';
 
 export default defineConfig({
@@ -6,6 +7,13 @@ export default defineConfig({
   build: {
     target: 'es2020',
     chunkSizeWarningLimit: 900,
+    // 兩個頁面：正式版遊戲與 Gate 1 玩法原型
+    rollupOptions: {
+      input: {
+        main: resolve(import.meta.dirname, 'index.html'),
+        prototype: resolve(import.meta.dirname, 'prototype.html'),
+      },
+    },
   },
   test: {
     include: ['tests/unit/**/*.test.js'],

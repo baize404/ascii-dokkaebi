@@ -8,7 +8,8 @@
     "preview": "vite preview --port 4173",
     "test": "vitest run",
     "test:e2e": "node tests/e2e/playthrough.mjs",
-    "test:stability": "vite build && node tests/e2e/stability.mjs"
+    "test:stability": "vite build && node tests/e2e/stability.mjs",
+    "test:proto": "vite build && node tests/e2e/proto.mjs"
   },
   "license": "MIT",
   "dependencies": {
