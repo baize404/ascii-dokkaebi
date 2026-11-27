@@ -7,7 +7,11 @@ export const RUN_SPEED = 5.2;
 export const WALK_SPEED = 2.2;
 const RADIUS = 0.45;
 const ARRIVE_DIST = 0.15;
-const TURN_RATE = 10;
+/** 轉身的彈簧頻率（每秒）：約 0.3 秒轉到位 */
+const TURN_OMEGA = 15;
+/** 速度平滑（每秒的收斂率）：起步、轉彎與停下都有短暫的加減速，近景時不會抽動 */
+const ACCEL = 9;
+const DECEL = 12;
 /** 點擊移動：目的地比這個近就用走的 */
 const WALK_DISTANCE = 5;
 
@@ -49,6 +53,8 @@ export class Player {
     this.onArrive = null;
     this.onFail = null;
     this.speed = 0;
+    this.vel = { x: 0, z: 0 };
+    this.yawVel = 0;
     this.moveSpeed = RUN_SPEED;
     this.stuckTime = 0;
     this.lastPhase = 0;
@@ -69,8 +75,10 @@ export class Player {
   setPosition(x, z, yaw) {
     this.object.position.set(x, heightAt(x, z), z);
     if (Number.isFinite(yaw)) this.yaw = this.targetYaw = yaw;
+    this.yawVel = 0;
     this.pendulum.prev = null;
     for (const s of this.model.springs) s.reset();
+    this.vel.x = this.vel.z = 0;
     this.stop();
   }
 
@@ -197,19 +205,40 @@ export class Player {
       }
     }
 
+    // 速度平滑：實際速度朝「想要的速度」收斂，起步、停下、轉彎都不會瞬間改變
+    const wantX = dir ? dir.x * speed : 0;
+    const wantZ = dir ? dir.z * speed : 0;
+    const a = 1 - Math.exp(-dt * (dir ? ACCEL : DECEL));
+    this.vel.x += (wantX - this.vel.x) * a;
+    this.vel.z += (wantZ - this.vel.z) * a;
+    let vmag = Math.hypot(this.vel.x, this.vel.z);
+    if (!dir && vmag < 0.05) {
+      this.vel.x = this.vel.z = 0;
+      vmag = 0;
+    }
+
     let moved = 0;
-    if (dir) {
+    if (vmag > 0 && dt > 0) {
       const wp = this.waypoints[0];
-      const step = Math.min(speed * dt, wp && !move ? Math.hypot(wp.x - this.position.x, wp.z - this.position.z) : Infinity);
+      // 跟著路徑走時不要衝過路徑點
+      const limit = wp && !move && dir ? Math.hypot(wp.x - this.position.x, wp.z - this.position.z) : Infinity;
+      const step = Math.min(vmag * dt, limit);
       const before = { x: this.position.x, z: this.position.z };
-      let next = { x: before.x + dir.x * step, z: before.z + dir.z * step };
+      let next = { x: before.x + (this.vel.x / vmag) * step, z: before.z + (this.vel.z / vmag) * step };
       next = resolveCircle(next, RADIUS, this.world.colliders);
       next = clampToBounds(next, RADIUS, this.world.bounds);
       this.position.x = next.x;
       this.position.z = next.z;
-      this.targetYaw = Math.atan2(dir.x, dir.z);
+      if (dir) this.targetYaw = Math.atan2(dir.x, dir.z);
       moved = Math.hypot(next.x - before.x, next.z - before.z);
-      const progressed = moved > step * 0.2;
+      // 撞到東西時，速度跟著實際位移下降（不會一直往牆裡推）
+      if (moved < step * 0.98) {
+        this.vel.x = (next.x - before.x) / dt;
+        this.vel.z = (next.z - before.z) / dt;
+      }
+    }
+    if (dir) {
+      const progressed = moved > Math.min(speed, Math.max(vmag, 0.5)) * dt * 0.2;
       // 點擊移動時被擋住太久就放棄並告訴玩家，避免卡在牆邊抖動
       if (this.target && !progressed) {
         this.stuckTime += dt;
@@ -226,12 +255,21 @@ export class Player {
     // 轉身：原地大角度轉身時播放轉身步伐
     const turn = wrapAngle(this.targetYaw - this.yaw);
     if (!dir) this.animator.turn(turn);
-    this.yaw += turn * Math.min(1, dt * TURN_RATE);
+    // 臨界阻尼的轉身：角速度從 0 平順加速再減速（原本角速度在第一格就跳到最大，手和燈籠會被甩一下）
+    if (dt > 0) {
+      const n = Math.max(1, Math.ceil(dt / (1 / 120)));
+      const h = Math.min(dt, 0.1) / n;
+      for (let i = 0; i < n; i++) {
+        const d = wrapAngle(this.targetYaw - this.yaw);
+        this.yawVel += (TURN_OMEGA * TURN_OMEGA * d - 2 * TURN_OMEGA * this.yawVel) * h;
+        this.yaw += this.yawVel * h;
+      }
+    }
     this.object.rotation.y = this.yaw;
     this.object.position.y = heightAt(this.position.x, this.position.z);
 
     this.speed = dt > 0 ? moved / dt : 0;
-    this.animator.setMove(this.speed, moved);
+    this.animator.setMove(this.speed, moved, dt);
     this.object.updateMatrixWorld(true);
     this.animator.update(dt);
     this.#footsteps();

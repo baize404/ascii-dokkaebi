@@ -22,6 +22,7 @@ uniform float uJump;        // 剪影：鄰格距離比例差
 uniform float uCrease;      // 法線轉折門檻
 uniform float uIntra;       // 格內不連續門檻
 uniform float uHyst;        // 亮度遲滯（以階為單位）
+uniform float uEdgeKeep;    // 上一幀是輪廓時，強度降到多少以下才取消（鏡頭移動時 = 1，不黏）
 uniform float uFar;
 
 layout(location = 0) out vec4 oGlyph;  // rgb 顯示顏色（sRGB）；a 圖集中的字元編號
@@ -79,7 +80,7 @@ void main() {
   float strength = max(max(silhouette, D.g / uIntra), crease / uCrease) * sens * (1.0 - sky) * uEdges;
 
   bool wasEdge = prev.a >= uEdgeStart - 0.5 && prev.a < uEdgeStart + 3.5;
-  bool isEdge = strength > 1.0 || (wasEdge && strength > 0.7);
+  bool isEdge = strength > 1.0 || (wasEdge && strength > uEdgeKeep);
 
   float idx;
   if (isEdge) {

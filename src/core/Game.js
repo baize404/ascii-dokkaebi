@@ -444,6 +444,7 @@ export class Game {
     // 凍結（測試工具逐格推進）時由測試工具自己渲染，主迴圈不重複渲染同一格
     if (this.frozen) return;
     updatePointScale(this.world.pointMaterials, this.renderer.sceneHeight, this.camera.fov);
+    this.renderer.pass.setMotion(this.rig.camSpeed ?? 0);
     this.renderer.render(this.scene, this.camera);
     this.#monitorPerformance(dt);
   }
@@ -451,6 +452,7 @@ export class Game {
   /** 測試工具：用目前的鏡頭重畫一格 */
   #renderNow() {
     updatePointScale(this.world.pointMaterials, this.renderer.sceneHeight, this.camera.fov);
+    this.renderer.pass.setMotion(this.rig.camSpeed ?? 0);
     this.renderer.render(this.scene, this.camera);
   }
 
@@ -519,6 +521,41 @@ export class Game {
       },
       /** 直接改一個設定（等同在設定面板操作） */
       setSetting: (key, value) => this.settings.set(key, value),
+      /** 抖動診斷：主角身上幾個部位的世界座標（相對於腳下的位置） */
+      rigProbe: () => {
+        const pl = s()?.player;
+        if (!pl) return null;
+        const b = pl.model.bones;
+        const out = {};
+        const w = new Vector3();
+        for (const n of ['Head', 'Wrist.R', 'Elbow.L', 'Knee.L', 'Foot.L', 'Braid3', 'Ribbon', 'Skirt.B', 'Goreum2']) {
+          if (!b[n]) continue;
+          b[n].getWorldPosition(w);
+          out[n] = [w.x - pl.position.x, w.y - pl.object.position.y, w.z - pl.position.z];
+        }
+        pl.model.lantern?.getWorldPosition(w);
+        if (pl.model.lantern) out.lantern = [w.x - pl.position.x, w.y - pl.object.position.y, w.z - pl.position.z];
+        return out;
+      },
+      /** 抖動診斷：鏡頭與玩家的即時狀態 */
+      cameraInfo: () => {
+        const r = this.rig;
+        const v = (x) => (x ? [x.x, x.y, x.z] : null);
+        return {
+          pos: v(this.camera.position),
+          base: v(r.base),
+          lookAt: v(r.lookAt),
+          occlusion: r.occlusion,
+          occlusionTarget: r.occlusionTarget ?? 0,
+          viewBlend: r.viewBlend,
+          cellRows: r.cellRows,
+          mode: r.mode,
+          player: s() ? v(s().player.position) : null,
+          yaw: s()?.player.yaw ?? null,
+          density: this.renderer.layout?.density ?? null,
+          cols: this.renderer.layout?.cols ?? null,
+        };
+      },
       layout: () => ({ ...this.renderer.layout, mode: this.renderer.mode, atlas: { pure: this.renderer.atlas.pure, hd: this.renderer.atlas.hd } }),
       /** 逐格推進遊戲（凍結狀態下使用；錄影與姿勢截圖用，dt 固定） */
       step: (frames = 1, dt = 1 / 30, move = null, skipRender = false) => {
@@ -598,6 +635,11 @@ export class Game {
         this.#renderNow();
       },
       releaseShot: () => {
+        this.rig.lockedShot = false;
+      },
+      /** 凍結主迴圈但保留真實的鏡頭跟隨（錄影比較用） */
+      freeze: () => {
+        this.frozen = true;
         this.rig.lockedShot = false;
       },
       unfreeze: () => {

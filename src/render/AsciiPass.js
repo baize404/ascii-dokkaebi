@@ -45,6 +45,7 @@ export class AsciiPass {
     this.cellTarget = new WebGLRenderTarget(1, 1, { type: HalfFloatType, minFilter: NearestFilter, magFilter: NearestFilter, depthBuffer: false, count: 2 });
     const glyphTarget = () => new WebGLRenderTarget(1, 1, { type: HalfFloatType, minFilter: NearestFilter, magFilter: NearestFilter, depthBuffer: false });
     this.history = [glyphTarget(), glyphTarget()];
+    this.motion = 0;
     this.frame = 0;
     this.mode = 'hd';
     this.exposure = 3.0;
@@ -73,6 +74,7 @@ export class AsciiPass {
       uCrease: { value: 0.09 },
       uIntra: { value: 0.14 },
       uHyst: { value: 0.25 },
+      uEdgeKeep: { value: 0.7 },
       uFar: { value: 400 },
     });
     this.composite = fullscreen(compositeShader, {
@@ -162,6 +164,12 @@ export class AsciiPass {
     renderer.render(this.scene, this.camera);
   }
 
+  /** 鏡頭速度（公尺／秒）→ 0（靜止）～1（移動中） */
+  setMotion(speed) {
+    const t = Math.min(1, Math.max(0, (speed - 0.03) / 0.2));
+    this.motion = t * t * (3 - 2 * t);
+  }
+
   render(renderer, scene, camera) {
     this.reduce.uniforms.uNear.value = camera.near;
     this.reduce.uniforms.uFar.value = camera.far;
@@ -175,8 +183,13 @@ export class AsciiPass {
     // 3. 分類（上一幀的結果當遲滯參考；剛換尺寸或模式時清空）
     const prev = this.history[this.frame % 2];
     const next = this.history[(this.frame + 1) % 2];
+    // 遲滯是用「螢幕上同一格」的上一幀來比較；鏡頭移動時同一格已經是別的景物，
+    // 遲滯會讓字元黏住再一次跳開，所以只在鏡頭靜止時啟用（防止草、火光造成的閃爍）
     const hyst = this.classify.uniforms.uHyst;
     const keep = hyst.value;
+    const still = 1 - this.motion;
+    hyst.value = keep * still;
+    this.classify.uniforms.uEdgeKeep.value = 1 - 0.3 * still;
     if (this.resetHistory) hyst.value = -10; // 這一幀不參考歷史
     this.classify.uniforms.tPrev.value = prev.texture;
     this.#draw(renderer, this.classify, next);

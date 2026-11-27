@@ -74,11 +74,12 @@ export class CharacterAnimator {
   /**
    * 每幀呼叫（移動層）：speed 是實際速度（公尺／秒），distance 是這一幀實際走過的距離
    */
-  setMove(speed, distance) {
+  setMove(speed, distance, dt = 1 / 60) {
     if (!this.loco) return;
     const L = this.loco;
     const wasMoving = this.speed > 0.3;
-    this.speed += (speed - this.speed) * 0.35;
+    // 依時間換算的平滑（原本每格 0.35，在 60 Hz 時相同；其他幀率時反應速度不變）
+    this.speed += (speed - this.speed) * (1 - Math.pow(0.65, dt * 60));
     const moving = this.speed > 0.3;
     const runK = Math.min(1, Math.max(0, (this.speed - L.walkSpeed) / (L.runSpeed - L.walkSpeed)));
     const stride = L.walkStride + (L.runStride - L.walkStride) * runK;
@@ -99,7 +100,10 @@ export class CharacterAnimator {
   #transition(name, maxWeight) {
     const a = this.actions[name];
     if (!a) return;
-    this.transition?.action.stop();
+    // 上一個轉場還沒播完時淡出，不要在一格內直接砍掉（否則姿勢會跳一下）
+    const old = this.transition?.action;
+    if (old && old !== a) old.fadeOut(0.18);
+    else old?.stop();
     a.reset().setEffectiveWeight(0).play();
     this.transition = { name, action: a, t: 0, duration: a.getClip().duration, maxWeight };
     this.#setState(name);
@@ -243,7 +247,7 @@ export class CharacterAnimator {
 
     this.mixer.update(dt);
     this.model.root.updateMatrixWorld(true);
-    this.#feet();
+    this.#feet(dt);
     this.#hands();
     this.#look(dt);
     this.model.root.updateMatrixWorld(true);
@@ -252,21 +256,27 @@ export class CharacterAnimator {
     this.#face(dt);
   }
 
-  /** 腳掌貼地：依兩腳下方的地形高度調整骨盆與雙骨 IK */
-  #feet() {
+  /**
+   * 腳掌貼地。骨盆下降量平滑跟上（兩腳交替、地形起伏時上半身不會突然彈一下）；
+   * 不設開關門檻（原本高低差小於 4 mm 時整個關掉，在門檻附近會一開一關地抖）。
+   */
+  #feet(dt) {
     if (!this.footIK || !this.heightAt) return;
     const b = this.bones;
     const root = this.model.root;
     const h0 = this.heightAt(root.position.x, root.position.z);
     const ankles = ['L', 'R'].map((s) => b[`Ankle.${s}`].getWorldPosition(new Vector3()));
     const d = ankles.map((p) => this.heightAt(p.x, p.z) - h0);
-    if (Math.abs(d[0]) < 0.004 && Math.abs(d[1]) < 0.004) return;
-    b.Pelvis.position.y += Math.min(0, Math.min(d[0], d[1])) / root.scale.y;
+    const want = Math.min(0, Math.min(d[0], d[1]));
+    this.pelvisDrop ??= want;
+    this.pelvisDrop += (want - this.pelvisDrop) * (1 - Math.exp(-Math.max(0, dt) * 12));
+    const drop = this.pelvisDrop;
+    b.Pelvis.position.y += drop / root.scale.y;
     root.updateMatrixWorld(true);
     ['L', 'R'].forEach((s, i) => {
       const knee = b[`Knee.${s}`];
       const target = b[`Ankle.${s}`].getWorldPosition(new Vector3());
-      target.y += d[i] - Math.min(0, Math.min(d[0], d[1]));
+      target.y += d[i] - drop;
       const pole = knee.getWorldPosition(new Vector3()).add(new Vector3(0, 0, 0.5).applyQuaternion(root.quaternion));
       solveTwoBone(b[`Hip.${s}`], knee, b[`Ankle.${s}`], target, pole);
     });

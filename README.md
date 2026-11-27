@@ -46,6 +46,7 @@ npm run dev        # 開發伺服器 http://localhost:5173
 npm test           # 單元測試（Vitest）
 npm run build      # 打包到 dist/
 npm run test:e2e   # 先 build；用本機 Chrome 跑功能情境（可加情境名稱只跑一個，例如 desktopReal）
+npm run test:stability  # 畫面穩定度：鏡頭與角色在各種幀率下不抖動
 node tests/e2e/blackbox.mjs [keyboard,touch,explorer,newcomer]  # 黑箱模擬玩家：只看畫面文字、不傳送、不用答案介面
 node tests/e2e/record.mjs docs/media [take] [hd|pure|hybrid|3d]  # 逐格錄下實際遊戲動畫
 node tests/e2e/shots.mjs <資料夾> hd:fine,3d:-                  # 固定鏡頭比較截圖
@@ -111,7 +112,7 @@ src/
 └── styles/main.css         民俗暗黑童話風格的介面
 tests/
 ├── unit/                   規則、尋路與可解性、存檔、設定、骨架與動畫、門與碰撞、手勢、渲染版面、鏡頭
-└── e2e/                    playthrough（功能情境）、blackbox（黑箱模擬玩家）、record（錄影）、shots（比較截圖）、perf（效能）
+└── e2e/                    playthrough（功能情境）、stability（抖動）、blackbox（黑箱模擬玩家）、record（錄影）、shots（比較截圖）、perf（效能）
 ```
 
 分工原則：**規則**（GameState）只回傳結果代碼、不碰畫面；**演出**（scenes）依結果播對話與動畫；**場景**（world）只負責畫面；**內容**（data）全部是資料。重新開始時整個 Session（場景、玩家、尋路網格）會被丟棄並釋放資源。

@@ -1,9 +1,31 @@
-import { Vector3 } from 'three';
+import { Matrix4, Quaternion, Vector3 } from 'three';
 
 const origin = new Vector3();
 const restTip = new Vector3();
 const vel = new Vector3();
 const childOffset = new Vector3();
+const tmpCenter = new Vector3();
+const tmpFrom = new Vector3();
+const curM = new Matrix4();
+const wq = new Quaternion();
+const wscale = new Vector3();
+const aimF = new Vector3();
+const aimT = new Vector3();
+const aimP = new Vector3();
+const aimS = new Vector3();
+const aimQ = new Quaternion();
+const aimWQ = new Quaternion();
+const aimPQ = new Quaternion();
+const pp = new Vector3();
+const cp = new Vector3();
+const ip = new Vector3();
+const ps = new Vector3();
+const cs = new Vector3();
+const pq = new Quaternion();
+const cq = new Quaternion();
+const iq = new Quaternion();
+/** 物理的最長步長（秒） */
+const MAX_STEP = 1 / 120;
 
 /**
  * 彈簧骨（次級動態）：辮子、緞帶、衣帶、裙擺、燈籠。
@@ -24,34 +46,78 @@ export class SpringChain {
 
   reset() {
     for (const l of this.links) l.pos = null;
+    this.lastH = 0;
+    this.hasPrev = false;
   }
 
-  /** @param wind 世界座標的風力向量（m/s² 左右的量級） */
+  /**
+   * 時間修正的 Verlet：每一格的 dt 平均切成等長的小步（最長 1/120 秒），
+   * 剛性、阻尼依步長換算，上一步的速度依「這一步 ÷ 上一步」的長度比例縮放。
+   * 每一格剛好模擬它經過的時間，所以 60／120／144 Hz 或偶爾掉格時，擺動都一樣平順。
+   * @param wind 世界座標的風力向量（m/s² 左右的量級）
+   */
   update(dt, wind = null) {
     if (dt <= 0) return;
-    const step = Math.min(dt, 1 / 30);
-    for (const l of this.links) {
+    const total = Math.min(dt, 0.1);
+    const n = Math.max(1, Math.ceil(total / MAX_STEP));
+    const h = total / n;
+    // 錨點（鏈的父骨頭，例如頭）在這幾個小步之間從上一格的位置平滑移到這一格：
+    // 掉格時身體一次移動很多，辮子的根部也不會一次跳過去
+    const parent = this.links[0].bone.parent;
+    curM.copy(parent.matrixWorld);
+    this.prevM ??= new Matrix4();
+    if (!this.hasPrev) {
+      this.prevM.copy(curM);
+      this.hasPrev = true;
+    }
+    if (n > 1) {
+      this.prevM.decompose(pp, pq, ps);
+      curM.decompose(cp, cq, cs);
+    }
+    for (let i = 0; i < n; i++) {
+      if (i < n - 1) {
+        const a = (i + 1) / n;
+        parent.matrixWorld.compose(ip.lerpVectors(pp, cp, a), iq.slerpQuaternions(pq, cq, a), cs);
+      } else parent.matrixWorld.copy(curM);
+      this.#solve(h, wind);
+    }
+    this.prevM.copy(curM);
+  }
+
+  #solve(h, wind) {
+    // 原本的參數是以「每 1/60 秒一格」調出來的，換算成每一步
+    const frames = h * 60;
+    const damping = Math.pow(this.damping, frames);
+    for (let i = 0; i < this.links.length; i++) {
+      const l = this.links[i];
       const bone = l.bone;
-      // 彈簧骨不在動畫片段裡：每幀先回到綁定姿勢，再依物理轉向（避免上一幀的旋轉累積）
+      // 彈簧骨不在動畫片段裡：先回到綁定姿勢，再依物理轉向（避免旋轉累積）
       if (!bone.userData.animated) bone.quaternion.copy(l.rest);
+      // 注意：不要用 getWorldPosition／getWorldQuaternion，它們會重算父骨頭的矩陣，蓋掉插值的錨點
       bone.updateMatrixWorld(true);
-      bone.getWorldPosition(origin);
+      bone.matrixWorld.decompose(origin, wq, wscale);
       // 動畫姿勢下尾端應該在的位置
-      childOffset.copy(l.local).applyQuaternion(bone.getWorldQuaternion(bone.userData._wq ??= bone.quaternion.clone()));
+      childOffset.copy(l.local).applyQuaternion(wq);
       restTip.copy(origin).add(childOffset);
       if (!l.pos) {
         l.pos = restTip.clone();
         l.prev = restTip.clone();
       }
-      vel.subVectors(l.pos, l.prev).multiplyScalar(this.damping);
-      l.prev.copy(l.pos);
-      l.pos.add(vel);
-      // 剛性可以是陣列：靠近根部比較硬、末端比較軟（辮子、緞帶）
-      l.pos.lerp(restTip, Array.isArray(this.stiffness) ? this.stiffness[this.links.indexOf(l)] ?? 0.05 : this.stiffness);
-      l.pos.y -= this.gravity * step * step * 60;
-      if (wind) l.pos.addScaledVector(wind, this.windScale * step * step * 60);
+      if (h > 0) {
+        // 上一步的位移換算成這一步的長度（步長改變時速度不變）
+        const ratio = this.lastH > 0 ? h / this.lastH : 1;
+        vel.subVectors(l.pos, l.prev).multiplyScalar(damping * ratio);
+        l.prev.copy(l.pos);
+        l.pos.add(vel);
+        // 剛性可以是陣列：靠近根部比較硬、末端比較軟（辮子、緞帶）
+        const k = Array.isArray(this.stiffness) ? this.stiffness[i] ?? 0.05 : this.stiffness;
+        l.pos.lerp(restTip, 1 - Math.pow(1 - k, frames));
+        // 重力與風：原本每格位移 g/60，相當於加速度 60g
+        l.pos.y -= this.gravity * 60 * h * h;
+        if (wind) l.pos.addScaledVector(wind, this.windScale * 60 * h * h);
+      }
       for (const c of this.colliders) {
-        const center = c.object.getWorldPosition(new Vector3());
+        const center = tmpCenter.setFromMatrixPosition(c.object.matrixWorld);
         if (c.offset) center.add(c.offset);
         const d = l.pos.distanceTo(center);
         if (d < c.radius) l.pos.sub(center).setLength(c.radius).add(center);
@@ -59,19 +125,20 @@ export class SpringChain {
       // 固定長度
       l.pos.sub(origin).setLength(l.length).add(origin);
       // 把骨頭轉向質點
-      const from = childOffset.clone().add(origin);
+      const from = tmpFrom.copy(childOffset).add(origin);
       aim(bone, origin, from, l.pos);
     }
+    if (h > 0) this.lastH = h;
   }
 }
 
 function aim(bone, o, from, to) {
-  const f = from.clone().sub(o).normalize();
-  const t = to.clone().sub(o).normalize();
-  const q = bone.userData._q ?? (bone.userData._q = bone.quaternion.clone());
-  q.setFromUnitVectors(f, t);
-  const wq = bone.getWorldQuaternion(bone.userData._wq2 ??= bone.quaternion.clone()).premultiply(q);
-  const pq = bone.parent.getWorldQuaternion(bone.userData._pq ??= bone.quaternion.clone()).invert();
-  bone.quaternion.copy(pq.multiply(wq));
+  const f = aimF.copy(from).sub(o).normalize();
+  const t = aimT.copy(to).sub(o).normalize();
+  const q = aimQ.setFromUnitVectors(f, t);
+  bone.matrixWorld.decompose(aimP, aimWQ, aimS);
+  aimWQ.premultiply(q);
+  bone.parent.matrixWorld.decompose(aimP, aimPQ, aimS);
+  bone.quaternion.copy(aimPQ.invert().multiply(aimWQ));
   bone.updateMatrixWorld(true);
 }
