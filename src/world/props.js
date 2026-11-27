@@ -445,18 +445,28 @@ export function makePond(r, rand) {
   const water = new Mesh(
     new CircleGeometry(r, 40),
     new ShaderMaterial({
-      uniforms: { uTime: { value: 0 }, uMoon: { value: 0 } },
+      uniforms: { uTime: { value: 0 }, uMoon: { value: 0 }, uRipple: { value: new Vector3(0, 0, -99) } },
       vertexShader: 'varying vec2 vP; void main(){ vP = position.xy; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
       fragmentShader: `
-        uniform float uTime; uniform float uMoon; varying vec2 vP;
+        uniform float uTime; uniform float uMoon; uniform vec3 uRipple; varying vec2 vP;
         void main(){
           float d = length(vP);
+          // 微風吹出的細波＋中央慢慢擴散的水紋
           float ripple = sin(d * 9.0 - uTime * 1.6) * 0.5 + 0.5;
+          float wind = sin(vP.x * 7.0 + vP.y * 3.0 + uTime * 2.2) * sin(vP.y * 5.0 - uTime * 1.7);
+          // 玩家靠近岸邊時激起的漣漪（擴散、變淡）
+          float age = uTime - uRipple.z;
+          float rd = length(vP - uRipple.xy);
+          float ring = age > 0.0 && age < 3.0 ? smoothstep(0.08, 0.0, abs(rd - age * 0.8)) * (1.0 - age / 3.0) : 0.0;
           float sparkle = pow(max(0.0, sin(vP.x * 5.0 + uTime) * sin(vP.y * 6.0 - uTime * 1.3)), 6.0);
           vec3 deep = vec3(0.03, 0.06, 0.10);
           vec3 glint = mix(vec3(0.20, 0.42, 0.55), vec3(0.85, 0.82, 0.62), uMoon);
+          // 月亮回來後，水面中央映出月亮的倒影
+          vec2 moonPos = vec2(-0.4, 0.5) + vec2(sin(uTime * 0.8), cos(uTime * 0.6)) * 0.03 * wind;
+          float moon = uMoon * smoothstep(0.45, 0.25, length(vP - moonPos + vec2(wind * 0.04, 0.0)));
+          vec3 col = deep + glint * (ripple * 0.1 + wind * 0.05 + sparkle * (0.5 + uMoon)) + vec3(0.6, 0.75, 0.85) * ring * 0.6 + vec3(0.95, 0.92, 0.78) * moon;
           // alpha 0.75 = 柔和表面（給 ASCII 的物件遮罩；原始 3D 模式不受影響）
-          gl_FragColor = vec4(deep + glint * (ripple * 0.12 + sparkle * (0.5 + uMoon)), 0.75);
+          gl_FragColor = vec4(col, 0.75);
         }`,
     }),
   );

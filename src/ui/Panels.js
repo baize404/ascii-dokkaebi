@@ -198,7 +198,8 @@ export class Panels {
 
   // ---------- 地圖 ----------
 
-  openMap(minimap, data) {
+  /** @param onTravel(id) 點選看過的地點：關掉地圖、角色自己走過去 */
+  openMap(minimap, data, onTravel = null) {
     this.open('探索地圖', [
       {
         id: 'map',
@@ -207,6 +208,19 @@ export class Panels {
           const canvas = el('canvas', { class: 'map-big', 'aria-label': '探索地圖' });
           body.append(canvas);
           body.append(el('p', { class: 'muted', text: '▲ 你的位置　◆ 已知的任務地點　文字為已發現的地標。走過的地方才會從迷霧中出現。' }));
+          const places = data.places ?? [];
+          if (onTravel && places.length) {
+            body.append(
+              el('h3', { class: 'places-title', text: '看過的地點（點一下，角色會自己走過去）' }),
+              el(
+                'div',
+                { class: 'places' },
+                ...places.map((p) =>
+                  el('button', { type: 'button', class: `place${p.task ? ' task' : ''}`, 'data-place': p.id, onclick: () => onTravel(p.id) }, `${p.task ? '◆ ' : ''}${p.name}`),
+                ),
+              ),
+            );
+          }
           requestAnimationFrame(() => minimap.render(canvas, data));
         },
       },
@@ -330,6 +344,10 @@ export class Panels {
               ['normal', '中'],
               ['large', '大'],
             ]),
+            seg('cameraView', '鏡頭視角', [
+              ['explore', '遠景'],
+              ['close', '近景'],
+            ], '遠景看得到路與地標；近景鏡頭較低、較近，看得清楚手肘、膝蓋與手部動作。遊戲中按 V 或右上角按鈕切換。'),
             seg('cameraShake', '鏡頭震動', onOff),
             seg('reduceMotion', '減少動畫與閃爍', onOff),
             el('div', { class: 'actions' }, el('button', { type: 'button', onclick: () => onHelp?.() }, '操作說明'), el('button', { type: 'button', onclick: () => {
@@ -356,7 +374,7 @@ export class Panels {
           ['互動', 'E／Space，或直接點那個東西'],
           ['對話', '點一下或按 Space 繼續；選項可按數字鍵；點虛線的韓文看中文解釋'],
           ['鏡頭', '滑鼠滾輪縮放'],
-          ['快捷鍵', 'J 任務日誌　I 背包　M 地圖　T 切換 ASCII／3D　Esc 暫停'],
+          ['快捷鍵', 'J 任務日誌　I 背包　M 地圖　V 遠景／近景　T 切換 ASCII／3D　Esc 暫停'],
         ];
     this.open('操作說明', [
       {

@@ -3,3 +3,4 @@ dist/
 tests/e2e/screenshots/
 .DS_Store
 *.log
+.vitest/

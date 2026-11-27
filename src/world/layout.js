@@ -5,9 +5,12 @@ import { makeBox } from './Collision.js';
  * World 用它做碰撞，NavGrid 用它做尋路，單元測試也用它檢查每個互動點都走得到。
  * @param options.ropeOpen 금줄是否已經斷開
  */
-export function buildColliders(level, { ropeOpen = false } = {}) {
+export function buildColliders(level, { ropeOpen = false, kitchenDoorOpen = false } = {}) {
   const boxes = [];
-  for (const h of level.houses) boxes.push(makeBox(h.x, h.z, h.w + 0.8, h.d + 0.8));
+  for (const h of level.houses) {
+    if (h.walkIn) boxes.push(...kitchenColliders(h, kitchenDoorOpen));
+    else boxes.push(makeBox(h.x, h.z, h.w + 0.8, h.d + 0.8));
+  }
 
   const kitchen = level.houses.find((h) => h.id === 'kitchen');
   boxes.push(makeBox(kitchen.x - kitchen.w / 2 - 1.0, kitchen.z - 1.2, 0.9, 0.9)); // 煙囪
@@ -52,4 +55,32 @@ export function moundWallStones(level) {
     stones.push({ x, z, a });
   }
   return stones;
+}
+
+/** 廚房（可以走進去）：四面牆（東牆中間是門洞）、門扇、灶台、碗櫃、飯桌、水缸、米袋、柴堆、油燈 */
+export const KITCHEN_LAYOUT = { wall: 0.16, doorHalf: 0.85, platform: { w: 1.15, d: 3.4 } };
+export function kitchenColliders(h, doorOpen) {
+  const { wall, doorHalf, platform } = KITCHEN_LAYOUT;
+  const hw = h.w / 2;
+  const hd = h.d / 2;
+  const t = wall + 0.1;
+  const eastLen = hd - doorHalf;
+  const local = [
+    [0, -hd, h.w + t, t],
+    [0, hd, h.w + t, t],
+    [-hw, 0, t, h.d + t],
+    [hw, -(doorHalf + eastLen / 2), t, eastLen],
+    [hw, doorHalf + eastLen / 2, t, eastLen],
+    [-hw + wall / 2 + platform.w / 2, 0, platform.w + 0.1, platform.d + 0.1], // 灶台
+    [1.3, -hd + 0.45, 1.7, 0.5], // 碗櫃
+    [0.6, 1.0, 0.85, 0.85], // 飯桌
+    [2.7, 2.0, 0.75, 0.75], // 水缸
+    [2.6, -1.6, 0.7, 0.65], // 米袋
+    [-hw + 1.4, 2.1, 0.75, 0.5], // 柴堆
+    [-0.4, -1.7, 0.3, 0.3], // 油燈
+  ];
+  // 門關著時兩片門扇擋住門洞；打開後門扇貼在門洞兩側往內
+  if (!doorOpen) local.push([hw, 0, t, doorHalf * 2]);
+  else for (const s of [-1, 1]) local.push([hw - 0.4, s * (doorHalf - 0.02), 0.75, 0.12]);
+  return local.map(([x, z, w, d]) => makeBox(h.x + x, h.z + z, w, d));
 }

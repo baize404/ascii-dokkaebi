@@ -114,7 +114,8 @@ export class ParticleSystem {
     this.size[to] = this.size[from];
   }
 
-  update(dt) {
+  /** @param wind 世界風力（Vector3，可省略）：煙、落葉、火星這類輕的粒子會被吹動 */
+  update(dt, wind = null) {
     let i = 0;
     while (i < this.alive) {
       this.life[i] -= dt;
@@ -128,12 +129,21 @@ export class ParticleSystem {
       this.vel[i3] *= damp;
       this.vel[i3 + 1] = this.vel[i3 + 1] * damp - this.gravity[i] * dt;
       this.vel[i3 + 2] *= damp;
+      if (wind) {
+        // 阻力越大（越輕）的粒子越容易被風帶走；落葉另外左右翻飛
+        const k = this.drag[i] * 0.5 * dt;
+        this.vel[i3] += wind.x * k;
+        this.vel[i3 + 2] += wind.z * k;
+      }
       this.pos[i3] += this.vel[i3] * dt;
       this.pos[i3 + 1] += this.vel[i3 + 1] * dt;
       this.pos[i3 + 2] += this.vel[i3 + 2] * dt;
       if (this.pos[i3 + 1] < 0.02) {
+        // 落地：停住，只會被風推著慢慢滑
         this.pos[i3 + 1] = 0.02;
         this.vel[i3 + 1] = 0;
+        this.vel[i3] *= 0.9;
+        this.vel[i3 + 2] *= 0.9;
       }
       // 出生時快速亮起，之後慢慢淡出
       const k = this.life[i] / this.maxLife[i];

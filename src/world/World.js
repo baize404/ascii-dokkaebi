@@ -1,6 +1,10 @@
 import { preserveMaskBlending, tagObject } from '../render/objectId.js';
+import { Wind } from './Wind.js';
+import { makeCarvedLantern, makeKitchen, makeWellRig } from './buildings.js';
+import { DOOR, DoorController } from './DoorController.js';
 import {
   AdditiveBlending,
+  Vector2,
   AmbientLight,
   Color,
   DirectionalLight,
@@ -81,6 +85,8 @@ const BURSTS = {
   sleep: { count: 1, spread: 0.05, speed: 0.1, up: 0.5, color: 0xe2e8ef, life: 1.6, gravity: -0.1, drag: 0.5, size: 0.1 },
   tap: { count: 10, spread: 0.1, speed: 1.2, up: 0.3, color: 0xf2bd68, life: 0.5, gravity: 0.5, drag: 3, size: 0.12 },
   blocked: { count: 10, spread: 0.1, speed: 1.2, up: 0.3, color: 0xd65f4c, life: 0.5, gravity: 0.5, drag: 3, size: 0.12 },
+  splash: { count: 24, spread: 0.25, speed: 1.4, up: 1.6, color: 0x9ccfe8, life: 0.7, gravity: 5, drag: 1, size: 0.08 },
+  drip: { count: 1, spread: 0.15, speed: 0.05, up: -0.2, color: 0x9ccfe8, life: 0.6, gravity: 6, drag: 0.2, size: 0.05 },
 };
 
 /** 四季點燈特效 */
@@ -132,6 +138,7 @@ export class World {
     this.scene = new Scene();
     this.tweens = new Tweens();
     this.interactables = [];
+    this.wind = new Wind();
     this.pickables = [];
     this.facePoints = new Map();
     this.lanterns = [];
@@ -140,11 +147,13 @@ export class World {
     this.strips = [];
     this.emitAcc = {};
     this.time = 0;
-    this.dokAction = null;
     this.quality = QUALITY.high;
     this.reduceMotion = false;
     this.ropeOpen = false;
-    this.colliders = buildColliders(level, { ropeOpen: false });
+    this.colliderOpts = { ropeOpen: false, kitchenDoorOpen: false };
+    this.colliders = buildColliders(level, this.colliderOpts);
+    this.onCollidersChanged = null;
+    this.occluders = [];
     this.heightAt = heightAt;
 
     const rand = seededRandom(20261126);
@@ -277,7 +286,23 @@ export class World {
     this.houseGroups = new Map();
     this.windowMeshes = [];
     for (const h of L.houses) {
-      const g = makeHanok(h);
+      let g;
+      if (h.walkIn) {
+        // 廚房：真的牆、門洞、雙開門與室內
+        this.kitchen = makeKitchen(h);
+        this.kitchen.def = h;
+        g = this.kitchen.group;
+        this.kitchenDoor = new DoorController({
+          id: 'kitchen',
+          openSeconds: 0.9,
+          onAngle: (k) => {
+            for (const d of this.kitchen.doors) d.hinge.rotation.y = d.sign * 1.75 * k;
+            this.kitchen.interiorLight.intensity = 0.5 + 2.4 * k;
+          },
+          onStateChange: (st) => this.#setKitchenPassable(st === DOOR.OPEN),
+          isBlocked: () => this.#inKitchenDoorway(),
+        });
+      } else g = makeHanok(h);
       this.#place(g, h.x, h.z);
       this.houseGroups.set(h.id, g);
       g.traverse((o) => {
@@ -294,16 +319,23 @@ export class World {
     this.storehouse = makeStorehouse(s);
     this.#place(this.storehouse.group, s.x, s.z);
 
-    this.well = makeWell();
+    // 水井：轆轤的曲柄朝向玩家站的位置
+    this.wellRig = makeWellRig();
+    this.well = this.wellRig.group;
     this.#place(this.well, L.well.x, L.well.z);
-    this.wellBucket = this.well.children[this.well.children.length - 1];
+    const stand = L.interactables.find((i) => i.id === 'well');
+    this.well.rotation.y = -Math.atan2(stand.z - L.well.z, stand.x - L.well.x);
+    this.wellBucket = this.wellRig.bucket;
+    this.crankAngle = 0;
 
     this.jangseung = L.jangseung.map((j) => this.#place(makeJangseung(j), j.x, j.z));
 
     L.lanternSpots.forEach((spot, i) => {
       const carving = this.lanternLayout[i];
-      const lantern = makeStoneLantern(CARVING_COLORS[carving]);
+      const lantern = makeCarvedLantern(carving, CARVING_COLORS[carving]);
       this.#place(lantern.group, spot.x, spot.z);
+      // 刻紋（前後兩面）朝向參道，玩家站在路上調查時正好看到
+      lantern.group.rotation.y = spot.x < 0 ? Math.PI / 2 : -Math.PI / 2;
       lantern.carving = carving;
       this.lanterns.push(lantern);
     });
@@ -391,8 +423,11 @@ export class World {
 
     this.grandma = makeGrandmaModel();
     this.grandma.root.rotation.y = Math.PI / 2; // 面向東邊的小路
-    this.grandma.root.scale.setScalar(0.95);
-    this.#place(this.grandma.root, grandma.x, grandma.z, 0.42);
+    // 坐在마루邊緣：腳底在地面上、臀部在마루上、小腿從邊緣垂下
+    this.grandmaSeat = new Vector3(grandma.x - 0.05, heightAt(grandma.x, grandma.z) + 0.26, grandma.z);
+    this.grandmaStand = new Vector3(grandma.x + 0.55, heightAt(grandma.x + 0.55, grandma.z), grandma.z);
+    this.grandma.root.position.copy(this.grandmaSeat);
+    this.scene.add(this.grandma.root);
     this.grandmaAwake = false;
 
     this.cat = makeCatModel();
@@ -438,6 +473,7 @@ export class World {
       !near.some((i) => Math.hypot(i.x - x, i.z - z) < 1.3) &&
       Math.hypot(x - this.level.pond.x, z - this.level.pond.z) > this.level.pond.r + 0.4;
     this.grass = makeGrassField(1400, this.level.bounds, rand, isFree);
+    this.#windGrass();
     // 草叢跟著地形高度
     for (const mesh of this.grass.children) {
       const m4 = new Matrix4();
@@ -494,6 +530,45 @@ export class World {
       this.interactables.push({ ...def, position: new Vector3(def.x, 0, def.z) });
     }
     this.#updateFacePoints();
+  }
+
+  /** 草葉隨風彎曲、玩家走過時往兩旁倒（在頂點著色器裡做，草再多也不耗 CPU） */
+  #windGrass() {
+    const uniforms = {
+      uTime: { value: 0 },
+      uWindDir: { value: new Vector2(1, 0) },
+      uGust: { value: 1 },
+      uPlayer: { value: new Vector3(0, -99, 0) },
+      uMotion: { value: 1 },
+    };
+    this.grassUniforms = uniforms;
+    for (const mesh of this.grass.children) {
+      mesh.material.onBeforeCompile = (shader) => {
+        Object.assign(shader.uniforms, uniforms);
+        shader.vertexShader = shader.vertexShader
+          .replace('#include <common>', '#include <common>\nuniform float uTime; uniform vec2 uWindDir; uniform float uGust; uniform vec3 uPlayer; uniform float uMotion;')
+          .replace(
+            '#include <begin_vertex>',
+            `#include <begin_vertex>
+            #ifdef USE_INSTANCING
+              vec4 grassRoot = modelMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0);
+              mat3 grassRot = mat3(instanceMatrix);
+            #else
+              vec4 grassRoot = modelMatrix * vec4(0.0, 0.0, 0.0, 1.0);
+              mat3 grassRot = mat3(1.0);
+            #endif
+            float grassH = clamp(position.y / 0.5, 0.0, 1.0);
+            float grassPhase = grassRoot.x * 0.37 + grassRoot.z * 0.29;
+            float grassSway = (uGust * (0.55 + 0.45 * sin(uTime * 1.7 + grassPhase)) + 0.22 * sin(uTime * 3.4 + grassPhase * 2.3)) * uMotion;
+            vec2 grassBend = uWindDir * grassSway * 0.2;
+            vec2 grassAway = grassRoot.xz - uPlayer.xz;
+            float grassDist = length(grassAway);
+            if (grassDist < 1.1 && grassDist > 0.001) grassBend += normalize(grassAway) * (1.1 - grassDist) * 0.4;
+            transformed += inverse(grassRot) * vec3(grassBend.x, -0.15 * length(grassBend), grassBend.y) * grassH * grassH;`,
+          );
+      };
+      mesh.material.needsUpdate = true;
+    }
   }
 
   /** 物件遮罩：角色與互動物件在 ASCII 中優先保留輪廓與細節 */
@@ -586,6 +661,7 @@ export class World {
 
   setReduceMotion(on) {
     this.reduceMotion = on;
+    this.wind.reduceMotion = on;
   }
 
   // ---------- 場景效果 ----------
@@ -638,8 +714,37 @@ export class World {
         this.burst('lanternOn', this.lanternPosition(i));
         this.burst(lantern.carving, this.lanternPosition(i).add(new Vector3(0, 0.5, 0)));
       }
-      lantern.setLit(on);
+      // 讀檔（quiet）時直接亮；遊戲中點燈時火焰慢慢形成
+      if (on !== lantern.lit || quiet) lantern.setLit(on, quiet);
     });
+  }
+
+  /** 石燈火室的中心（世界座標）：點燈時手伸過去的位置 */
+  lanternFirePoint(spot) {
+    return this.lanterns[spot].group.localToWorld(new Vector3(0, 1.46, 0));
+  }
+
+  /**
+   * 點燈的接觸瞬間（LightLantern 動畫的 ignite 事件）：火星從燈籠飛進火室；
+   * 對的燈火焰慢慢長出來、石燈內部發亮、周圍光線逐漸變亮；錯的燈火苗閃一下被風吹熄。
+   */
+  igniteLantern(spot, correct, from = null) {
+    const p = this.lanternFirePoint(spot);
+    // 一串火星從手上的燈籠飛進火室
+    if (from) {
+      for (let i = 1; i <= 7; i++) {
+        const q = from.clone().lerp(p, i / 8);
+        q.y += Math.sin((i / 8) * Math.PI) * 0.18;
+        this.particles.emit({ x: q.x, y: q.y, z: q.z, count: 2, spread: 0.03, speed: 0.15, up: 0.25, color: 0xffb050, life: 0.35 + i * 0.06, gravity: -0.15, drag: 1.2, size: 0.06 });
+      }
+    }
+    this.burst('spark', p, { count: 14 });
+    if (!correct) return this.sputterLantern(spot);
+    const lantern = this.lanterns[spot];
+    lantern.setLit(true, false);
+    this.burst('lanternOn', p);
+    this.burst(lantern.carving, p.clone().add(new Vector3(0, 0.4, 0)));
+    return Promise.resolve();
   }
 
   /** 點錯的石燈：火光閃一下就被風吹熄 */
@@ -653,7 +758,8 @@ export class World {
   async setRopeOpen(open, instant = false) {
     if (this.ropeOpen === open) return;
     this.ropeOpen = open;
-    this.colliders = buildColliders(this.level, { ropeOpen: open });
+    this.colliderOpts.ropeOpen = open;
+    this.colliders = buildColliders(this.level, this.colliderOpts);
     const rope = this.ropeGate.userData.rope;
     if (!open) {
       rope.visible = true;
@@ -673,19 +779,149 @@ export class World {
     }, ease.outBack);
   }
 
-  openStorehouse(instant = false) {
-    const { door, lock, side, group } = this.storehouse;
-    lock.visible = false;
+  /** 倉庫門：鎖住 → 用鑰匙開鎖 → 打開（DoorController） */
+  async openStorehouse(instant = false) {
+    const door = this.#storehouseDoor();
     if (instant) {
-      door.rotation.y = side * 1.9;
-      return Promise.resolve();
+      door.restore(DOOR.OPEN);
+      return;
     }
-    this.burst('door', group.position.clone().add(new Vector3(door.position.x, 0.6, 0)));
-    return this.tweens.add(0.8, (k) => (door.rotation.y = side * k * 1.9));
+    const { group, door: hinge } = this.storehouse;
+    await door.unlock();
+    this.burst('door', group.position.clone().add(new Vector3(hinge.position.x, 0.6, 0)));
+    await door.open();
   }
 
-  /** 轉一次轆轤：水桶往上升一段 */
-  crankWell(cranks, total) {
+  #storehouseDoor() {
+    if (!this.storehouseDoor) {
+      const { door: hinge, lock, side } = this.storehouse;
+      this.storehouseDoor = new DoorController({
+        id: 'storehouse',
+        locked: true,
+        openSeconds: 0.8,
+        onAngle: (k) => (hinge.rotation.y = side * 1.9 * k),
+        onStateChange: (st) => {
+          lock.visible = st === DOOR.LOCKED;
+          if (st === DOOR.UNLOCKING) this.burst('spark', this.storehouse.group.position.clone().add(new Vector3(hinge.position.x, 1.5, -0.6)));
+        },
+      });
+    }
+    return this.storehouseDoor;
+  }
+
+  // ---------- 廚房的門 ----------
+
+  /** 開／關廚房門（instant 用於讀檔） */
+  setKitchenDoor(open, instant = false) {
+    if (!this.kitchenDoor) return Promise.resolve();
+    if (instant) {
+      this.kitchenDoor.restore(open ? DOOR.OPEN : DOOR.CLOSED);
+      return Promise.resolve();
+    }
+    return open ? this.kitchenDoor.open() : this.kitchenDoor.close();
+  }
+
+  /** 廚房門把（世界座標），開門動畫的手部 IK 目標 */
+  kitchenHandle() {
+    const h = this.kitchen.def;
+    return new Vector3(h.x + h.w / 2 + 0.08, heightAt(h.x + h.w / 2, h.z) + 1.0, h.z - 0.1);
+  }
+
+  /** 廚房桌上的位置（撿葫蘆瓶時走過去） */
+  kitchenTableSpot() {
+    const h = this.kitchen.def;
+    return new Vector3(h.x + 1.9, 0, h.z + 0.6);
+  }
+
+  #setKitchenPassable(open) {
+    if (this.colliderOpts.kitchenDoorOpen === open) return;
+    this.colliderOpts.kitchenDoorOpen = open;
+    this.colliders = buildColliders(this.level, this.colliderOpts);
+    this.onCollidersChanged?.();
+  }
+
+  /** 關門時門扇掃過的範圍裡有沒有人（玩家）→ 有就不能關 */
+  #inKitchenDoorway() {
+    const p = this.playerPos;
+    if (!p || !this.kitchen) return false;
+    const h = this.kitchen.def;
+    const lx = p.x - h.x;
+    const lz = p.z - h.z;
+    return lx > h.w / 2 - 1.3 && lx < h.w / 2 + 0.35 && Math.abs(lz) < 0.85 + 0.35;
+  }
+
+  /** 玩家在廚房裡：屋頂與朝向鏡頭的牆淡出（剖視），鏡頭不因屋頂而拉近 */
+  #updateKitchenCutaway(dt) {
+    const k = this.kitchen;
+    if (!k || !this.playerPos) return;
+    const h = k.def;
+    const lx = this.playerPos.x - h.x;
+    const lz = this.playerPos.z - h.z;
+    const inside = Math.abs(lx) < h.w / 2 + 0.2 && Math.abs(lz) < h.d / 2 + 0.2;
+    this.kitchenInside = inside;
+    k.fade = (k.fade ?? 1) + ((inside ? 0.12 : 1) - (k.fade ?? 1)) * Math.min(1, dt * 5);
+    for (const m of k.fadeMats) {
+      const transparent = k.fade < 0.98;
+      if (m.transparent !== transparent) {
+        m.transparent = transparent;
+        m.depthWrite = !transparent;
+        m.needsUpdate = true;
+      }
+      m.opacity = k.fade;
+    }
+    const want = inside ? 'inside' : 'outside';
+    if (this.occluderMode !== want) {
+      this.occluderMode = want;
+      this.occluders.length = 0;
+      for (const [id, g] of this.houseGroups) if (id !== 'kitchen' || !inside) this.occluders.push(id === 'kitchen' ? k.roof : g);
+      this.occluders.push(this.storehouse.group, ...this.swayers, this.shrineTree);
+    }
+  }
+
+  /**
+   * 轉一次轆轤：曲柄轉一整圈（用明確的起始與目標角度，與幀率無關），繩子收短、水桶上升；
+   * 玩家的手由 IK 握住曲柄。水桶離開水面時有水花與滴水。
+   */
+  async crankWell(cranks, total, player = null) {
+    const rig = this.wellRig;
+    const from = this.crankAngle;
+    const to = from + Math.PI * 2;
+    const lv0 = (cranks - 1) / total;
+    const lv1 = cranks / total;
+    const grip = new Vector3();
+    const target = { target: grip, weight: 1 };
+    const updateGrip = () => rig.gripPoint.getWorldPosition(grip);
+    updateGrip();
+    let hold = null;
+    if (player) {
+      player.animator.handTargets = { L: target };
+      hold = player.hold('CrankWell', { fadeIn: 0.2 });
+    }
+    let splashed = false;
+    await this.tweens.add(1.1, (k) => {
+      this.crankAngle = from + (to - from) * k;
+      rig.roller.rotation.x = this.crankAngle;
+      rig.setLevel(lv0 + (lv1 - lv0) * k);
+      updateGrip();
+      if (!splashed && lv0 === 0 && rig.level > 0.04) {
+        splashed = true;
+        const p = this.well.localToWorld(new Vector3(0, 0.47, 0));
+        this.burst('splash', p);
+      }
+      if (rig.level > 0.02 && Math.random() < 0.3) this.burst('drip', rig.bucket.getWorldPosition(new Vector3()));
+    });
+    hold?.stop();
+    if (player) player.animator.handTargets = {};
+  }
+
+  /** 讀檔：把水桶放到目前的高度 */
+  setWellLevel(cranks, total) {
+    this.wellRig.setLevel(cranks / total);
+    this.wellRig.key.visible = cranks < total;
+  }
+
+  /** 舊版轆轤（保留給測試比較）：轉一次轆轤，水桶往上升一段 */
+  crankWellLegacy(cranks, total) {
     const bucket = this.wellBucket;
     const roller = this.well.children.find((c) => c.geometry?.type === 'CylinderGeometry' && Math.abs(c.rotation.z - Math.PI / 2) < 0.01);
     const from = bucket.position.y;
@@ -699,8 +935,27 @@ export class World {
     });
   }
 
-  setGrandmaAwake(awake) {
+  /** 할머니醒來：揉眼睛 → 起身走到마루前 → 站著（instant 用於讀檔） */
+  async setGrandmaAwake(awake, instant = false) {
+    const g = this.grandma;
     this.grandmaAwake = awake;
+    if (!awake) {
+      g.root.position.copy(this.grandmaSeat);
+      g.animator.setBase('Sleep', 0.01);
+      return;
+    }
+    if (instant) {
+      g.root.position.copy(this.grandmaStand);
+      g.animator.setBase('Idle', 0.01);
+      return;
+    }
+    await g.animator.play('RubEyes', { fadeIn: 0.3 });
+    const from = g.root.position.clone();
+    const stand = g.animator.play('StandUp', { fadeIn: 0.15 });
+    g.animator.setBase('Idle', 0.2);
+    await this.tweens.add(1.4, (k) => g.root.position.lerpVectors(from, this.grandmaStand, k));
+    await stand;
+    g.animator.play('Wave');
   }
 
   /** 黑貓：前往下一個地點（帶一點跳躍與煙霧） */
@@ -712,11 +967,15 @@ export class World {
       this.#updateCatInteractable();
       return;
     }
+    // 先蹲低蓄力、跳起來（Jump 動畫），在空中化成一陣煙消失
+    const jump = this.cat.animator.play('Jump', { fadeIn: 0.08 });
+    await this.tweens.add(0.35, () => {});
     this.burst('smoke', prev.clone().add(new Vector3(0, 0.3, 0)), { count: 8, size: 0.3 });
     await this.tweens.add(0.4, (k) => {
       this.cat.root.position.y = prev.y + Math.sin(k * Math.PI) * 0.8;
-      this.cat.root.scale.setScalar(1 - k);
+      this.cat.root.scale.setScalar(Math.max(0.01, 1 - k));
     });
+    await jump;
     this.#placeCat(stage);
     this.#updateCatInteractable();
     await this.tweens.add(0.3, (k) => this.cat.root.scale.setScalar(Math.max(0.01, k)));
@@ -757,8 +1016,13 @@ export class World {
   }
 
   dokkaebiReact(kind) {
-    const duration = { laugh: 1.4, surprised: 0.9, cheer: 1.6, pout: 1.0 }[kind] ?? 1;
-    this.dokAction = { kind, t: 0, duration };
+    const clip = { laugh: 'Laugh', surprised: 'Startled', cheer: 'Cheer', pout: 'Sulk' }[kind];
+    if (clip === 'Sulk') {
+      const hold = this.dokkaebi.animator.play('Sulk');
+      setTimeout(() => this.dokkaebi.animator.stop('Sulk'), 1400);
+      hold.catch?.(() => {});
+    } else if (clip) this.dokkaebi.animator.play(clip);
+    this.dokkaebi.animator.browRaise = kind === 'surprised' ? 1 : kind === 'pout' ? -1 : 0;
     const head = this.dokkaebiHead;
     if (kind === 'laugh') this.burst('wrong', head);
     if (kind === 'surprised') this.burst('correct', head);
@@ -888,13 +1152,29 @@ export class World {
 
   // ---------- 每幀更新 ----------
 
+  /** 某個位置的風力（給角色的頭髮、衣帶、燈籠使用） */
+  windAt(p) {
+    return this.wind.at(p);
+  }
+
   update(dt, playerPos) {
     this.time += dt;
+    this.wind.update(dt);
+    this.playerPos = playerPos ?? null;
+    this.kitchenDoor?.update(dt);
+    this.storehouseDoor?.update(dt);
+    if (this.kitchen) {
+      const w = this.wind.at(this.kitchen.group.position);
+      // 屋裡沒有風，灶火只輕輕晃
+      for (const f of this.kitchen.fires) f.update(this.time, w.multiplyScalar(0.15), 1);
+      for (const [i, l] of this.kitchen.fireLights.entries()) l.intensity = 2.0 + 0.5 * Math.sin(this.time * 9 + i) * Math.sin(this.time * 4.3 + i * 2);
+      this.#updateKitchenCutaway(dt);
+    }
     const t = this.time;
     this.tweens.update(dt);
 
     this.lanterns.forEach((lantern, i) => {
-      lantern.flicker(t, i * 1.7);
+      lantern.update(t, dt, this.wind.at(lantern.group.position), i * 1.7);
       if (lantern.lit) {
         this.#emitRate(`ember-${i}`, 4, dt, () => this.burst('spark', this.lanternPosition(i).setY(this.lanternPosition(i).y + 0.3), { speed: 0.3, up: 0.9, size: 0.09, life: 1.4 }));
       }
@@ -922,31 +1202,24 @@ export class World {
       });
     }
 
-    // 할머니：睡著時點頭冒「Z」，醒著時揮手
+    // NPC：由各自的 AnimationMixer 驅動；離玩家遠時降低更新頻率
+    const head = playerPos ? this.#tmpHead.set(playerPos.x, playerPos.y + 1.3, playerPos.z) : null;
     const g = this.grandma;
-    if (this.grandmaAwake) {
-      g.head.rotation.x = Math.sin(t * 0.8) * 0.05;
-      g.arm.rotation.z = -1.2 + Math.sin(t * 4) * 0.4 * (Math.sin(t * 0.5) > 0.3 ? 1 : 0);
-      g.body.rotation.x = 0;
-    } else {
-      g.head.rotation.x = 0.45 + Math.sin(t * 1.2) * 0.08;
-      g.body.rotation.x = 0.12;
-      g.arm.rotation.z = 0;
-      this.#emitRate('sleep', 0.8, dt, () => this.burst('sleep', g.head.getWorldPosition(new Vector3()).add(new Vector3(0, 0.3, 0))));
+    g.animator.lookTarget = this.grandmaAwake && head && head.distanceTo(g.root.position) < 7 ? head : null;
+    this.#updateNpc(g, dt, playerPos);
+    if (!this.grandmaAwake) this.#emitRate('sleep', 0.8, dt, () => this.burst('sleep', g.head.getWorldPosition(new Vector3()).add(new Vector3(0, 0.3, 0))));
+    const cat = this.cat;
+    cat.animator.lookTarget = head && head.distanceTo(cat.root.position) < 6 ? head : null;
+    // 黑貓偶爾舔毛、伸懶腰
+    this.catIdleTimer = (this.catIdleTimer ?? 6) - dt;
+    if (this.catIdleTimer < 0 && !cat.animator.busy) {
+      this.catIdleTimer = 7 + Math.random() * 6;
+      const lick = Math.random() < 0.6;
+      const p = cat.animator.play(lick ? 'Lick' : 'Stretch', { cancelable: true });
+      if (lick) setTimeout(() => cat.animator.stop('Lick'), 2600);
+      p.catch?.(() => {});
     }
-
-    // 黑貓：尾巴搖、轉頭
-    {
-      let seg = this.cat.tail;
-      let i = 0;
-      while (seg) {
-        seg.rotation.y = Math.sin(t * 2.4 - i * 0.6) * 0.35;
-        seg.rotation.x = -0.25;
-        seg = seg.children.find((c) => c.isGroup);
-        i++;
-      }
-      this.cat.head.rotation.y = Math.sin(t * 0.7) * 0.5;
-    }
+    this.#updateNpc(cat, dt, playerPos);
 
     // 腳印呼吸般地明暗
     this.footprints.children.forEach((fp, i) => (fp.material.opacity = 0.45 + 0.4 * Math.max(0, Math.sin(t * 1.5 - i * 0.4))));
@@ -964,7 +1237,7 @@ export class World {
     }
 
     // 樹與布條隨風擺動
-    const wind = Math.sin(t * 0.7) * 0.5 + 0.5;
+    const wind = Math.min(1.4, this.wind.gust * 0.7);
     const motion = this.reduceMotion ? 0.3 : 1;
     for (const tree of this.swayers) {
       const { phase, amp } = tree.userData.sway;
@@ -988,53 +1261,54 @@ export class World {
     }
     this.pond.userData.water.material.uniforms.uTime.value = t;
 
-    this.#animateDokkaebi(dt, t);
-    this.particles.update(dt);
+    this.#animateDokkaebi(dt, head);
+    this.particles.update(dt, this.wind.at(playerPos ?? this.dokBase).multiplyScalar(0.8));
+    // 草：風與玩家推開（頂點著色器）
+    const gu = this.grassUniforms;
+    if (gu) {
+      gu.uTime.value = t;
+      const d = this.wind.direction;
+      gu.uWindDir.value.set(d.x, d.z);
+      gu.uGust.value = this.wind.gust;
+      if (playerPos) gu.uPlayer.value.copy(playerPos);
+      gu.uMotion.value = this.reduceMotion ? 0.35 : 1;
+    }
+    // 池塘：玩家靠近岸邊時激起漣漪
+    const pondU = this.pond.userData.water.material.uniforms;
+    if (playerPos && pondU.uRipple) {
+      const L = this.level.pond;
+      const dx = playerPos.x - L.x;
+      const dz = playerPos.z - L.z;
+      const d = Math.hypot(dx, dz);
+      this.rippleTimer = (this.rippleTimer ?? 0) - dt;
+      if (d < L.r + 1.2 && this.rippleTimer <= 0) {
+        this.rippleTimer = 1.1;
+        const k = Math.min(1, (L.r - 0.3) / Math.max(d, 0.01));
+        pondU.uRipple.value.set(dx * k, -dz * k, t);
+      }
+    }
     this.fireflies.update(t);
     this.stars.update(t);
   }
 
-  #animateDokkaebi(dt, t) {
+  #animateDokkaebi(dt, head) {
     const d = this.dokkaebi;
-    if (!d.root.visible || this.tweensBusyDok) return;
-    let y = Math.abs(Math.sin(t * 3)) * 0.12;
-    let z = 0;
-    let headX = 0;
-    const headZ = Math.sin(t * 2.2) * 0.12;
-    let bodyZ = Math.sin(t * 1.5) * 0.06;
-    let clubZ = -0.5;
-    let clubX = Math.sin(t * 3) * 0.2;
-    let scale = 1;
-    const a = this.dokAction;
-    if (a) {
-      a.t += dt;
-      const k = Math.min(1, a.t / a.duration);
-      const bell = Math.sin(Math.PI * k);
-      if (a.kind === 'laugh') {
-        y = Math.abs(Math.sin(k * Math.PI * 7)) * 0.4 * bell;
-        headX = -0.35 * bell + Math.sin(k * Math.PI * 14) * 0.12;
-        bodyZ = Math.sin(k * Math.PI * 7) * 0.12;
-        clubX = Math.sin(k * Math.PI * 7) * 0.5;
-      } else if (a.kind === 'surprised') {
-        z = -0.6 * bell;
-        headX = 0.3 * bell;
-        scale = 1 + 0.12 * bell;
-      } else if (a.kind === 'cheer') {
-        y = bell * 0.8;
-        clubZ = -0.5 - bell * 2.4;
-        clubX = Math.sin(k * Math.PI * 4) * 0.6;
-        headX = -0.3 * bell;
-      } else if (a.kind === 'pout') {
-        headX = 0.35 * bell;
-        bodyZ = 0.15 * bell;
-      }
-      if (k >= 1) this.dokAction = null;
-    }
-    d.root.position.set(this.dokBase.x, this.dokBase.y + y, this.dokBase.z + z);
-    d.root.rotation.z = bodyZ;
-    d.head.rotation.set(headX, 0, headZ);
-    d.club.rotation.set(clubX, 0, clubZ);
-    if (scale !== 1 || a) d.root.scale.setScalar(scale);
+    if (!d.root.visible) return;
+    if (!this.tweensBusyDok) d.root.position.copy(this.dokBase);
+    d.animator.lookTarget = head;
+    d.animator.update(dt);
+  }
+
+  #tmpHead = new Vector3();
+
+  /** NPC 動畫更新：近的每幀更新，遠的累積時間、隔幾幀才更新一次（遠距離角色動畫降頻） */
+  #updateNpc(npc, dt, playerPos) {
+    const far = playerPos ? npc.root.position.distanceTo(playerPos) > 22 : false;
+    npc.lodTime = (npc.lodTime ?? 0) + dt;
+    npc.lodFrame = ((npc.lodFrame ?? 0) + 1) % 3;
+    if (far && npc.lodFrame !== 0) return;
+    npc.animator.update(npc.lodTime);
+    npc.lodTime = 0;
   }
 
   dispose() {

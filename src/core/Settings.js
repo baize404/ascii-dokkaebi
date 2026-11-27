@@ -14,6 +14,7 @@ export const SETTINGS_SCHEMA = {
   pixelRatio: { default: 'auto', type: 'enum', values: ['auto', '1', '1.5', '2'] },
   shadows: { default: 'auto', type: 'enum', values: ['auto', 'off', 'low', 'high'] },
   uiScale: { default: 'normal', type: 'enum', values: ['small', 'normal', 'large'] },
+  cameraView: { default: 'explore', type: 'enum', values: ['explore', 'close'] },
   cameraShake: { default: true, type: 'boolean' },
   reduceMotion: { default: false, type: 'boolean' },
   showFps: { default: false, type: 'boolean' },

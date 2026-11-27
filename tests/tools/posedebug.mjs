@@ -1,0 +1,13 @@
+import { Vector3 } from 'three';
+import { makePlayerModel } from '../../src/world/characters.js';
+const m = makePlayerModel();
+const a = m.animator;
+const clip = process.argv[2] ?? 'Pickup';
+const at = Number(process.argv[3] ?? 0.8);
+a.play(clip);
+const clipDur = a.clips[clip].duration;
+for (let t = 0; t < at * clipDur; t += 1 / 60) a.update(1 / 60);
+m.root.updateMatrixWorld(true);
+const w = (n) => m.bones[n].getWorldPosition(new Vector3()).toArray().map((x) => x.toFixed(2)).join(',');
+console.log(clip, at, 'overlay', a.overlay?.weight?.toFixed(2));
+for (const n of ['Shoulder.L', 'Elbow.L', 'Wrist.L', 'Finger.L', 'Shoulder.R', 'Elbow.R', 'Wrist.R', 'Hip.L', 'Knee.L', 'Ankle.L', 'Head']) console.log(n.padEnd(11), w(n));

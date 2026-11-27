@@ -27,6 +27,7 @@ export class Hud {
     wire('objective', 'ui:journal');
     wire('btn-inventory', 'ui:inventory');
     wire('btn-map', 'ui:map');
+    wire('btn-view', 'ui:cameraView');
     wire('btn-menu', 'ui:pause');
     wire('btn-hint', 'ui:hint');
     wire('minimap', 'ui:map');

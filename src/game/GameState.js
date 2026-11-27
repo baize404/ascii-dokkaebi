@@ -36,6 +36,7 @@ const defaultFlags = () => ({
   wellCranks: 0,
   keyTaken: false,
   storehouseOpen: false,
+  kitchenDoorOpen: false,
   makgeolliTaken: false,
   grandmaAwake: false,
   ropeOpen: false,
@@ -116,6 +117,11 @@ export class GameState {
     this.flags.readStele = true;
     this.addClue('stele');
     return first ? 'first' : 'again';
+  }
+
+  /** 廚房門的開關（存檔用） */
+  setKitchenDoor(open) {
+    this.flags.kitchenDoorOpen = !!open;
   }
 
   visitKitchen() {

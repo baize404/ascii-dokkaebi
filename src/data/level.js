@@ -12,7 +12,7 @@ export const LEVEL = {
   rope: { x: 0, z: -13.4, w: 4.2, d: 0.6 },
 
   houses: [
-    { id: 'kitchen', x: -11, z: 9.5, w: 7, d: 5, door: 'east', glow: true },
+    { id: 'kitchen', x: -11, z: 9.5, w: 7, d: 5, door: 'east', glow: true, walkIn: true },
     { id: 'grandma-house', x: -12, z: 1, w: 6, d: 5, door: 'east', glow: false },
     { id: 'house-se', x: 13, z: 12, w: 7, d: 5, door: 'west', glow: true },
   ],
@@ -60,7 +60,7 @@ export const LEVEL = {
     { id: 'storehouse', label: '查看 倉庫', x: 10.1, z: -1, radius: 2.0 },
     { id: 'footprints', label: '調查 腳印', x: 7.2, z: -3.9, radius: 1.5 },
     { id: 'grandma', label: '和 할머니 說話', x: -7.2, z: -0.6, radius: 1.4 },
-    { id: 'screen', label: '看看 屋裡', x: -7.2, z: 2.2, radius: 1.4 },
+    { id: 'screen', label: '看看 屋裡的屏風', x: -7.2, z: 2.2, radius: 1.4 },
     { id: 'house-se', label: '查看 門板', x: 8.1, z: 12, radius: 2.0 },
     { id: 'lantern-0', label: '查看 石燈', x: -2.1, z: -4, radius: 1.5 },
     { id: 'lantern-1', label: '查看 石燈', x: 2.1, z: -4, radius: 1.5 },

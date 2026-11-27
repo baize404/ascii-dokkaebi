@@ -105,6 +105,7 @@ void main() {
 
   vec3 tint = clamp(sat * uGlyphGain, 0.0, 1.0);
   if (isEdge) tint = clamp(tint * 1.2 + 0.05, 0.0, 1.0);
-  if (charCov > 0.0) tint = clamp(max(tint, sat * (uGlyphGain + 0.5)) + 0.03, 0.0, 1.0);
+  // 角色在夜裡也要看得出輪廓：顏色有最低亮度（深色頭髮不會變成一片黑洞）
+  if (charCov > 0.0) tint = clamp(max(max(tint, sat * (uGlyphGain + 0.5)), vec3(0.17, 0.16, 0.22)) + 0.03, 0.0, 1.0);
   oGlyph = vec4(tint, idx);
 }

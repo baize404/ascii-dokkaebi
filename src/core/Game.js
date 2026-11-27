@@ -138,6 +138,15 @@ export class Game {
       case 'cameraShake':
         this.rig.shakeEnabled = v && !this.settings.get('reduceMotion');
         break;
+      case 'cameraView': {
+        this.rig.setView(v);
+        const btn = document.getElementById('btn-view');
+        if (btn) {
+          btn.textContent = v === 'close' ? '遠景' : '近景';
+          btn.setAttribute('aria-pressed', String(v === 'close'));
+        }
+        break;
+      }
       case 'reduceMotion':
         root.dataset.reduceMotion = String(v);
         this.dialogue.instantText = v;
@@ -354,7 +363,11 @@ export class Game {
 
     const journal = () => playing() && !this.dialogue.isOpen && this.#openJournal();
     const inventory = () => playing() && !this.dialogue.isOpen && this.#openInventory();
-    const map = () => playing() && this.panels.openMap(this.minimap, this.session.mapData());
+    const travel = (id) => {
+      this.panels.close();
+      this.session?.travelTo(id);
+    };
+    const map = () => playing() && !this.dialogue.isOpen && this.panels.openMap(this.minimap, this.session.mapData(), travel);
     bus.on('ui:journal', journal);
     bus.on('input:journal', journal);
     bus.on('ui:inventory', inventory);
@@ -386,6 +399,14 @@ export class Game {
       }
     });
     bus.on('input:zoom', (d) => this.rig.zoomBy(d));
+    const toggleView = () => {
+      if (this.mode !== 'playing') return;
+      const next = this.settings.get('cameraView') === 'close' ? 'explore' : 'close';
+      this.settings.set('cameraView', next);
+      this.hud.toast(next === 'close' ? '近景：看得清楚角色的動作' : '遠景：看得清楚道路與地標');
+    };
+    bus.on('input:cameraView', toggleView);
+    bus.on('ui:cameraView', toggleView);
     bus.on('settings:change', ({ key }) => this.#applySetting(key));
     document.addEventListener('pointerdown', () => this.audio.unlock(), { once: true });
     document.addEventListener('visibilitychange', () => {
@@ -420,9 +441,17 @@ export class Game {
       else this.preview?.update(dt);
       this.rig.update(dt);
     }
+    // 凍結（測試工具逐格推進）時由測試工具自己渲染，主迴圈不重複渲染同一格
+    if (this.frozen) return;
     updatePointScale(this.world.pointMaterials, this.renderer.sceneHeight, this.camera.fov);
     this.renderer.render(this.scene, this.camera);
     this.#monitorPerformance(dt);
+  }
+
+  /** 測試工具：用目前的鏡頭重畫一格 */
+  #renderNow() {
+    updatePointScale(this.world.pointMaterials, this.renderer.sceneHeight, this.camera.fov);
+    this.renderer.render(this.scene, this.camera);
   }
 
   // ---------- 自動化測試介面（網址加上 ?test 才會掛到 window） ----------
@@ -480,6 +509,7 @@ export class Game {
         this.frozen = true;
         this.rig.snapShot(new Vector3(...pos), new Vector3(...look));
         this.rig.update(0);
+        this.#renderNow();
       },
       /** 切換渲染模式與字元密度（等同在設定裡切換） */
       setRender: (render, density, sampling) => {
@@ -487,7 +517,89 @@ export class Game {
         if (density && density !== '-') this.settings.set('density', density);
         if (sampling) this.settings.set('sampling', String(sampling));
       },
+      /** 直接改一個設定（等同在設定面板操作） */
+      setSetting: (key, value) => this.settings.set(key, value),
       layout: () => ({ ...this.renderer.layout, mode: this.renderer.mode, atlas: { pure: this.renderer.atlas.pure, hd: this.renderer.atlas.hd } }),
+      /** 逐格推進遊戲（凍結狀態下使用；錄影與姿勢截圖用，dt 固定） */
+      step: (frames = 1, dt = 1 / 30, move = null, skipRender = false) => {
+        const ss = s();
+        for (let i = 0; i < frames; i++) {
+          if (ss) ss.update(dt, move, this.mode === 'playing');
+          else this.preview?.update(dt);
+          if (!this.rig.lockedShot) this.rig.update(dt);
+          if (!skipRender) this.#renderNow();
+        }
+        if (frames === 0) this.#renderNow();
+      },
+      /** 讓主角播放某個動作片段 */
+      act: (clip) => {
+        s()?.player.act(clip, { cancelable: false });
+      },
+      /** NPC 動作（錄影用）：npc = grandma | cat | dokkaebi */
+      npcAct: (npc, clip) => {
+        const w = s()?.world;
+        if (!w) return;
+        if (npc === 'grandma' && clip === 'wake') return void w.setGrandmaAwake(true);
+        if (npc === 'dokkaebi') w.setDokkaebiVisible(true);
+        w[npc]?.animator.play(clip);
+      },
+      /**
+       * 錄影用的演出（真的呼叫遊戲裡的同一套動畫與場景函式，只是不經過對話）：
+       * door：走到廚房門口開門、再關門；crank：轉三次轆轤；light：點亮一盞石燈；
+       * dokkaebi：도깨비登場、大笑、歡呼；moon：月亮回歸、池塘倒影變化
+       */
+      demo: (name, arg = 0) => {
+        const ss = s();
+        if (!ss) return;
+        const { world: w, player: pl } = ss;
+        const run = async () => {
+          if (name === 'door') {
+            await pl.act('OpenDoor', { events: { swing: () => w.setKitchenDoor(true) } });
+            await new Promise((r) => setTimeout(r, 400));
+            await pl.act('CloseDoor', { events: { swing: () => w.setKitchenDoor(false) } });
+          } else if (name === 'crank') {
+            for (let i = 1; i <= 3; i++) await w.crankWell(i, 3, pl);
+          } else if (name === 'light') {
+            const fire = w.lanternFirePoint(arg);
+            const reach = fire.clone().lerp(pl.position.clone().setY(fire.y), 0.28);
+            pl.faceTowards(fire);
+            await pl.act('LightLantern', { hand: { R: { target: reach, weight: 1, envelope: [0.1, 0.36, 0.62, 0.92] } }, look: fire, events: { ignite: () => w.igniteLantern(arg, true, pl.model.lantern?.getWorldPosition(new Vector3())) } });
+          } else if (name === 'dokkaebi') {
+            await w.spawnDokkaebi();
+            w.dokkaebiReact('laugh');
+            await new Promise((r) => setTimeout(r, 1800));
+            w.dokkaebiReact('cheer');
+          } else if (name === 'moon') {
+            await w.returnMoon();
+            await w.lightUpVillage();
+          }
+        };
+        run().catch((e) => console.error(e));
+      },
+      npcPosition: (npc) => {
+        const p = s()?.world[npc]?.root.position;
+        return p ? { x: p.x, y: p.y, z: p.z } : null;
+      },
+      animState: () => {
+        const a = s()?.player.animator;
+        return a ? { state: a.state, history: [...a.history], speed: a.speed, phase: a.phase } : null;
+      },
+      setYaw: (yaw) => {
+        const p = s()?.player;
+        if (p) p.yaw = p.targetYaw = yaw;
+      },
+      /** 鏡頭跟著主角，但用指定的相對位置（錄影用） */
+      followShot: (offset, lookHeight = 0.9) => {
+        const p = s()?.player.position;
+        if (!p) return;
+        this.rig.lockedShot = true;
+        this.rig.snapShot(new Vector3(p.x + offset[0], p.y + offset[1], p.z + offset[2]), new Vector3(p.x, p.y + lookHeight, p.z));
+        this.rig.update(0);
+        this.#renderNow();
+      },
+      releaseShot: () => {
+        this.rig.lockedShot = false;
+      },
       unfreeze: () => {
         this.frozen = false;
         if (s()) this.rig.follow(s().player.position, true);

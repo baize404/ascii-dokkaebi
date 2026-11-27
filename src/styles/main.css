@@ -951,3 +951,24 @@ button:disabled {
   background: rgba(8, 13, 22, 0.75); border: 1px solid rgba(242, 189, 104, 0.35);
 }
 .seg { flex-wrap: wrap; }
+
+/* 地圖：看過的地點（點一下自動走過去） */
+.places-title {
+  margin: 0.9rem 0 0.4rem;
+  font-size: 0.9rem;
+  color: var(--gold, #f2bd68);
+  font-weight: 500;
+}
+.places {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+.places .place {
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0.35rem 0.8rem;
+}
+.places .place.task {
+  border-color: var(--red, #d65f4c);
+}

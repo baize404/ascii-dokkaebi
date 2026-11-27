@@ -19,6 +19,7 @@ const KEY_EVENTS = {
   KeyJ: 'input:journal',
   KeyI: 'input:inventory',
   KeyM: 'input:map',
+  KeyV: 'input:cameraView',
   Escape: 'input:escape',
   KeyP: 'input:escape',
 };
@@ -36,7 +37,11 @@ export class Input {
 
     this.onReset = null;
     window.addEventListener('keydown', (e) => this.#onKeyDown(e));
-    window.addEventListener('keyup', (e) => this.pressed.delete(e.code));
+    window.addEventListener('keyup', (e) => {
+      this.pressed.delete(e.code);
+      if (e.key === 'Shift') this.walkHeld = false;
+    });
+    this.walkHeld = false;
     // 視窗失去焦點或切到背景：清掉所有按住的鍵、手勢與搖桿，避免角色自己一直走
     window.addEventListener('blur', () => this.clear(true));
     document.addEventListener('visibilitychange', () => document.hidden && this.clear(true));
@@ -65,6 +70,7 @@ export class Input {
   }
 
   #onKeyDown(e) {
+    if (e.key === 'Shift') this.walkHeld = true;
     const inField = e.target instanceof HTMLElement && e.target.closest('input, textarea, select');
     if (inField) return;
     const onButton = e.target instanceof HTMLElement && e.target.closest('button');
@@ -103,6 +109,7 @@ export class Input {
   /** 清除按住的鍵；all=true 時連手勢與搖桿一起清除 */
   clear(all = false) {
     this.pressed.clear();
+    this.walkHeld = false;
     if (all) {
       this.gesture.reset();
       this.joy = { x: 0, y: 0 };

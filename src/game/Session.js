@@ -20,6 +20,28 @@ const STELE_MARKER = { x: 0, y: 4.3, z: 19.5 };
  * 負責互動分派、區域觸發、新手教學、存檔與地圖迷霧。
  * 重新開始時整個 Session 會被丟掉並 dispose，不會殘留狀態。
  */
+/** 地圖清單上的地點名稱（石燈依從村子走過去的方向命名） */
+export const PLACE_NAMES = {
+  stele: '장승（村口）',
+  pond: '池塘',
+  kitchen: '廚房',
+  jars: '장독대',
+  well: '水井',
+  storehouse: '倉庫',
+  footprints: '發光的腳印',
+  grandma: '할머니',
+  screen: '할머니家的屏風',
+  'house-se': '貼符的門板',
+  'lantern-0': '石燈（左前）',
+  'lantern-1': '石燈（右前）',
+  'lantern-2': '石燈（左後）',
+  'lantern-3': '石燈（右後）',
+  rope: '금줄',
+  altar: '祭壇',
+  cat: '黑貓',
+};
+const SEEN_RADIUS = 10;
+
 export class Session {
   constructor(game, { state, player = null, extra = {} }) {
     this.game = game;
@@ -34,6 +56,8 @@ export class Session {
     preserveMaskBlending(this.player.object);
     this.explored = new ExploredGrid(extra.explored);
     this.tutorial = new Set(Array.isArray(extra.tutorial) ? extra.tutorial : []);
+    /** 玩家看過（曾經在附近）的互動地點：地圖上可以點選後自動走過去 */
+    this.seen = new Set(Array.isArray(extra.seen) ? extra.seen.filter((id) => PLACE_NAMES[id]) : []);
     this.busy = false;
     this.nearest = null;
     this.shellPickable = false;
@@ -46,7 +70,10 @@ export class Session {
     this.raycaster = new Raycaster();
     this.disposed = false;
     this.#applyState();
-    game.rig.occluders = [...this.world.houseGroups.values(), this.world.storehouse.group, ...this.world.swayers, this.world.shrineTree];
+    // 門打開或關上時，碰撞改變 → 重建尋路網格；鏡頭遮擋清單由 World 依玩家是否在屋裡維護
+    this.world.onCollidersChanged = () => this.rebuildNav();
+    this.world.occluders.push(...this.world.houseGroups.values(), this.world.storehouse.group, ...this.world.swayers, this.world.shrineTree);
+    game.rig.occluders = this.world.occluders;
   }
 
   /** 讀檔後把場景同步成存檔的樣子 */
@@ -58,7 +85,10 @@ export class Session {
       this.rebuildNav();
     }
     if (s.flags.storehouseOpen) w.openStorehouse(true);
-    if (s.flags.grandmaAwake) w.setGrandmaAwake(true);
+    if (s.flags.kitchenDoorOpen) w.setKitchenDoor(true, true);
+    if (s.flags.kitchenVisited) w.kitchen.gourd.visible = false;
+    w.setWellLevel(s.flags.keyTaken ? 3 : s.flags.wellCranks, 3);
+    if (s.flags.grandmaAwake) w.setGrandmaAwake(true, true);
     w.setCatStage(s.flags.catStage, true);
     if (s.flags.offered && !s.flags.finished) {
       w.showOfferings(true, { quiet: true });
@@ -91,7 +121,17 @@ export class Session {
       choose: (line, choices, opts) => g.dialogue.choose(line, choices, opts),
       sfx: (name, opts) => g.audio.sfx.play(name, opts),
       wait: (ms) => new Promise((r) => setTimeout(r, ms)),
-      gotItem: (id) => this.gotItem(id),
+      gotItem: (id, opts) => this.gotItem(id, opts),
+      /** 讓主角走到某處（劇情演出用），走到或放棄時 resolve */
+      walkTo: (point, timeout = 6000) =>
+        new Promise((resolve) => {
+          const timer = setTimeout(() => resolve(false), timeout);
+          const res = this.player.walkTo(point, () => (clearTimeout(timer), resolve(true)), 0.25, () => (clearTimeout(timer), resolve(false)));
+          if (!res.ok) {
+            clearTimeout(timer);
+            resolve(false);
+          }
+        }),
     };
   }
 
@@ -125,7 +165,7 @@ export class Session {
   update(dt, move, playing) {
     const p = this.player.position;
     this.world.update(dt, p);
-    this.player.update(dt, playing && !this.busy ? move : null);
+    this.player.update(dt, playing && !this.busy ? move : null, this.game.input.walkHeld);
     if (!playing) return;
     this.state.stats.playSeconds += dt;
 
@@ -136,6 +176,7 @@ export class Session {
     if (this.mapTimer <= 0) {
       this.mapTimer = 0.25;
       this.explored.reveal(p.x, p.z);
+      this.#markSeen(p);
       this.game.minimap.render(this.game.minimapCanvas, this.mapData());
       this.#checkTriggers();
       this.#updateTutorial();
@@ -165,6 +206,40 @@ export class Session {
       }
     }
     return best;
+  }
+
+  #markSeen(p) {
+    for (const it of this.world.activeInteractables()) {
+      if (!PLACE_NAMES[it.id] || this.seen.has(it.id)) continue;
+      if (Math.hypot(it.x - p.x, it.z - p.z) < SEEN_RADIUS) this.seen.add(it.id);
+    }
+  }
+
+  /**
+   * 地圖上點選看過的地點：用尋路走過去（真的走，不是傳送），到了之後由玩家自己決定要不要互動。
+   * 走不到時說明原因（例如山丘被금줄攔住）。
+   */
+  travelTo(id) {
+    if (!this.canInteract || !this.mapData().places.some((p) => p.id === id)) return false;
+    const it = this.world.interactable(id);
+    if (!it) return false;
+    const gate = this.world.blockedReason?.(id);
+    if (gate) {
+      this.#blocked(it.position, gate);
+      return false;
+    }
+    const res = this.player.walkTo(it.position, null, Math.min(0.9, it.radius * 0.6), () => this.#blocked(it.position, 'blocked'));
+    if (!res.ok) {
+      this.#blocked(it.position, this.#unreachableReason(it.position));
+      return false;
+    }
+    if (!res.reached) {
+      this.#blocked(it.position, this.#unreachableReason(it.position, 'near'));
+      return true;
+    }
+    this.world.showTap(it.position);
+    this.game.hud.toast(`走向：${PLACE_NAMES[id]}`);
+    return true;
   }
 
   /** 區域觸發：發現地標、走上山丘、靠近금줄 */
@@ -256,6 +331,7 @@ export class Session {
     g.hud.tip('');
     this.world.setHighlight(null);
     g.rig.setFocus(true);
+    this.#frameInteraction(id);
     this.state.stats.interactions++;
     try {
       await this.#dispatch(id);
@@ -272,6 +348,24 @@ export class Session {
         this.#afterChange();
       }
     }
+  }
+
+  /**
+   * 互動鏡頭：和 NPC 說話用雙人鏡頭、調查物件用肩後特寫、操作機關用低角度近景。
+   * 劇情腳本自己下的過場鏡頭（rig.shot）會蓋過這裡的設定。
+   */
+  #frameInteraction(id) {
+    const rig = this.game.rig;
+    const w = this.world;
+    const p = this.player.position;
+    const at = w.facePoint(id);
+    if (!at) return;
+    const target = new Vector3(at.x, heightAt(at.x, at.z), at.z);
+    if (id === 'grandma' || id === 'stele') rig.frame(p, target, 'dialogue');
+    else if (id === 'cat') rig.frame(p, target, 'dialogue', 0.4);
+    else if (id.startsWith('lantern-')) rig.frame(p, target, 'inspect', 1.6);
+    else if (['screen', 'footprints', 'house-se', 'rope', 'pond', 'jars'].includes(id)) rig.frame(p, target, 'inspect', id === 'footprints' || id === 'pond' ? 0.2 : 1);
+    else if (['kitchen', 'well', 'storehouse'].includes(id)) rig.frame(p, target, 'action');
   }
 
   /** 互動中途出錯時把畫面恢復到可以繼續玩的狀態 */
@@ -311,11 +405,21 @@ export class Session {
     this.save();
   }
 
-  gotItem(id) {
+  /**
+   * 取得道具：規則已經在 GameState 提交；畫面上撿拾動畫在「手碰到」（contact 事件）時才讓道具消失、播放特效。
+   * @param o.onContact 手碰到道具時（例如讓桌上的葫蘆瓶消失）
+   */
+  gotItem(id, { onContact = null } = {}) {
     const g = this.game;
     const item = ITEMS[id];
-    this.player.play('pickup');
-    this.world.burst('item', this.player.position.clone().setY(this.player.position.y + 1));
+    this.player.play('pickup', {
+      events: {
+        contact: () => {
+          onContact?.();
+          this.world.burst('item', this.player.position.clone().setY(this.player.position.y + 0.6));
+        },
+      },
+    });
     g.audio.sfx.play('item');
     g.hud.toast(`取得：${item.name}（${item.note}）`, item.icon);
     g.hud.setInventoryBadge(true);
@@ -465,14 +569,24 @@ export class Session {
     }
     if (f.readStele && !f.ropeOpen) add(0, -6.5);
     if (f.ropeOpen && !f.shellWon) add(LEVEL.altar.x, LEVEL.altar.z);
-    return { player: { x: this.player.position.x, z: this.player.position.z, yaw: this.player.yaw }, explored: this.explored.cells, landmarks: s.landmarks, markers };
+    // 看過的地點＋已知的任務地點（地圖上有 ◆ 的地方，例如字條提到的장독대，即使還沒走近過）
+    const places = LEVEL.interactables
+      .map((it) => {
+        const at = this.world.interactable(it.id);
+        if (!at) return null;
+        const task = markers.some((m) => Math.hypot(m.x - at.x, m.z - at.z) < 3.5);
+        if (!this.seen.has(it.id) && !task) return null;
+        return { id: it.id, name: PLACE_NAMES[it.id], task };
+      })
+      .filter(Boolean);
+    return { player: { x: this.player.position.x, z: this.player.position.z, yaw: this.player.yaw }, explored: this.explored.cells, landmarks: s.landmarks, markers, places };
   }
 
   save() {
     this.autosaveTimer = 0;
     if (this.disposed) return;
     const p = this.player.position;
-    this.game.saves.save(this.state, { x: p.x, z: p.z, yaw: this.player.yaw }, { explored: this.explored.save(), tutorial: [...this.tutorial] });
+    this.game.saves.save(this.state, { x: p.x, z: p.z, yaw: this.player.yaw }, { explored: this.explored.save(), tutorial: [...this.tutorial], seen: [...this.seen] });
   }
 
   dispose() {
