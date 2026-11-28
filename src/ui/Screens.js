@@ -1,5 +1,3 @@
-import { textToAscii } from './asciiTitle.js';
-
 const BEST_KEY = 'ascii-dokkaebi.best-seconds';
 const formatTime = (s) => `${Math.floor(s / 60)} 分 ${String(s % 60).padStart(2, '0')} 秒`;
 
@@ -23,12 +21,6 @@ export class Screens {
     this.bus = bus;
     this.title = document.getElementById('screen-title');
     this.end = document.getElementById('screen-end');
-    const titleArt = document.getElementById('ascii-title');
-    const renderTitle = () => {
-      titleArt.textContent = textToAscii('도깨비', window.innerWidth < 600 ? 40 : 64);
-    };
-    renderTitle();
-    window.addEventListener('resize', renderTitle);
 
     const click = (id, event) =>
       document.getElementById(id).addEventListener('click', (e) => {

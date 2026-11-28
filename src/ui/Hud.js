@@ -111,7 +111,7 @@ export class Hud {
   setFps(fps, layout = null) {
     this.fpsEl.hidden = fps === null;
     if (fps === null) return;
-    const grid = layout ? ` · ${layout.cols}×${layout.rows} 格 ×${layout.samples}` : '';
+    const grid = layout ? ` · ${layout.width}×${layout.height} · ${layout.quality}` : '';
     this.fpsEl.textContent = `${fps.toFixed(0)} FPS · ${(1000 / Math.max(fps, 1)).toFixed(1)} ms${grid}`;
   }
 }

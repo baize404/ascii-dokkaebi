@@ -32,11 +32,10 @@ const check = (ok, label) => {
   console.log(`  ${ok ? '✓' : '✗'} ${label}`);
 };
 
-console.log('[鏡頭] 角色在畫面上的平順度（字元密度 Fine，一格 6 px）');
+console.log('[鏡頭] 角色在畫面上的平順度（純 3D）');
 for (const view of ['explore', 'close']) {
   const r = await page.evaluate((view) => {
     const api = window.__dokkaebi;
-    api.setSetting('density', 'fine');
     api.setSetting('cameraView', view);
     api.teleport(0, 21);
     api.step(120, 1 / 60, null, true);

@@ -132,3 +132,92 @@ describe('原型提示', () => {
     expect(nextHint(p, 90, new Set())).toBeNull();
   });
 });
+
+describe('4.0：漸進遮風', () => {
+  it('閘門關越多，峽谷裡的風越弱；全關時燈火不會被吹熄', async () => {
+    const { windExposure, gateShield, FLAME, WIND_LEAK } = await import('../../src/proto/rules.js');
+    const levels = [1, 0.75, 0.5, 0.25, 0].map((o) => windExposure(0, 0, o, 1));
+    expect(levels).toEqual([...levels].sort((a, b) => b - a));
+    expect(windExposure(0, 0, 0, 1)).toBe(WIND_LEAK);
+    expect(WIND_LEAK).toBeLessThan(FLAME.threshold);
+    expect(windExposure(0, 10, 1, 1)).toBe(0); // 峽谷外沒有風
+    expect(gateShield(2)).toBe(1);
+    const l = new Lantern();
+    for (let i = 0; i < 600; i++) l.update(1 / 60, windExposure(0, 0, 0, 1));
+    expect(l.lit).toBe(true);
+    const half = new Lantern();
+    for (let i = 0; i < 600; i++) half.update(1 / 60, windExposure(0, 0, 0.5, 1));
+    expect(half.lit).toBe(false); // 半開仍然危險：一直站在陣風裡會熄
+  });
+});
+
+describe('4.0：記憶物件的狀態', () => {
+  it('靈視打開後要完全成形才走得上去，關掉後先崩散再消失', async () => {
+    const { MemoryState, MEMORY } = await import('../../src/proto/rules.js');
+    const m = new MemoryState();
+    const step = (sec, o) => {
+      const events = [];
+      for (let t = 0; t < sec; t += 1 / 60) {
+        const e = m.update(1 / 60, o);
+        if (e) events.push(e);
+      }
+      return events;
+    };
+    expect(m.solid).toBe(false);
+    expect(step(MEMORY.REVEAL * 0.5, { spirit: true, heat: 1 })).toEqual(['revealing']);
+    expect(m.solid).toBe(false); // 成形一半：還不能走
+    expect(m.form).toBeGreaterThan(0.3);
+    expect(step(MEMORY.REVEAL, { spirit: true, heat: 1 })).toEqual(['stable']);
+    expect(m.solid).toBe(true);
+    expect(step(0.1, { spirit: true, heat: 0.3 })).toEqual(['unstable']);
+    expect(m.solid).toBe(true);
+    expect(step(0.1, { spirit: true, heat: 0.48 })).toEqual([]); // 遲滯：剛回到門檻不會立刻變回 stable
+    expect(step(0.1, { spirit: true, heat: 0.9 })).toEqual(['stable']);
+    expect(step(0.1, { spirit: false, heat: 0.9 })).toEqual(['dissolving']);
+    expect(m.solid).toBe(true); // 崩散中還撐得住
+    expect(step(MEMORY.DISSOLVE, { spirit: false, heat: 0.9 })).toEqual(['hidden']);
+    expect(m.solid).toBe(false);
+    expect(m.form).toBe(0);
+  });
+
+  it('成形到一半就關掉靈視：直接回到隱藏，不會留下走得上去的半座橋', async () => {
+    const { MemoryState } = await import('../../src/proto/rules.js');
+    const m = new MemoryState();
+    m.update(0.2, { spirit: true, heat: 1 });
+    expect(m.state).toBe('revealing');
+    m.update(1 / 60, { spirit: false, heat: 1 });
+    expect(m.state).toBe('hidden');
+    expect(m.solid).toBe(false);
+  });
+});
+
+describe('4.0：絞盤與閘門機構', () => {
+  it('閘門開合由手柄實際轉的角度決定，轉約 2.7 圈全關', async () => {
+    const { GateMechanism, GATE_FULL_ANGLE } = await import('../../src/proto/rules.js');
+    expect(GATE_FULL_ANGLE / (Math.PI * 2)).toBeGreaterThan(2);
+    expect(GATE_FULL_ANGLE / (Math.PI * 2)).toBeLessThan(3.5);
+    const g = new GateMechanism();
+    g.turn(GATE_FULL_ANGLE / 2);
+    expect(g.open01).toBeCloseTo(0.5);
+    expect(g.state).toBe('closing');
+    g.settle();
+    expect(g.state).toBe('partial'); // 轉到一半停手：停在半途
+    const actual = g.turn(GATE_FULL_ANGLE); // 多轉也不會超過全關
+    expect(actual).toBeCloseTo(GATE_FULL_ANGLE / 2);
+    expect(g.state).toBe('closed');
+    g.turn(-GATE_FULL_ANGLE * 2);
+    expect(g.state).toBe('open');
+  });
+
+  it('關的路徑上有東西：停住（blocked），不會穿過去', async () => {
+    const { GateMechanism } = await import('../../src/proto/rules.js');
+    let blocked = true;
+    const g = new GateMechanism({ isBlocked: () => blocked });
+    expect(g.turn(1)).toBe(0);
+    expect(g.state).toBe('blocked');
+    expect(g.open01).toBe(1);
+    blocked = false;
+    g.turn(1);
+    expect(g.open01).toBeLessThan(1);
+  });
+});

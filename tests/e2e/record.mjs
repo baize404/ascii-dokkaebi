@@ -13,8 +13,7 @@ import { preview } from 'vite';
 
 const outDir = resolve(process.argv[2] ?? 'docs/media');
 const only = process.argv[3] ? process.argv[3].split(',') : null;
-const render = process.argv[4] ?? 'hd';
-const density = process.argv[5] ?? 'ultra';
+const quality = process.argv[4] ?? 'high';
 mkdirSync(outDir, { recursive: true });
 
 const SPOT = { x: 2.2, z: 14.5 };
@@ -155,14 +154,14 @@ const browser = await chromium.launch({
 const page = await browser.newPage({ viewport: { width: 960, height: 600 } });
 const errors = [];
 page.on('pageerror', (e) => errors.push(e.message));
-await page.addInitScript(() => localStorage.setItem('ascii-dokkaebi.settings', JSON.stringify({ density: 'ultra', sampling: 'auto', quality: 'high' })));
+await page.addInitScript(() => localStorage.setItem('ascii-dokkaebi.settings', JSON.stringify({ quality: 'high' })));
 await page.goto(server.resolvedUrls.local[0] + '?test');
 await page.waitForFunction(() => window.__dokkaebi);
 await page.locator('#btn-new').click();
 await page.locator('#btn-skip').click();
 await page.waitForFunction(() => window.__dokkaebi.state().mode === 'playing');
 await page.evaluate(() => document.querySelectorAll('#hud, #minimap, .hud').forEach((e) => (e.style.visibility = 'hidden')));
-await api(page, 'setRender', render === 'hd' ? 'hd' : render, density, 'auto');
+await api(page, 'setRender', quality);
 
 for (const [name, take] of Object.entries(TAKES)) {
   if (only && !only.includes(name)) continue;

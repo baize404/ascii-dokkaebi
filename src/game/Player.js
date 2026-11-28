@@ -331,13 +331,23 @@ export class Player {
     pivot.quaternion.copy(socketQ.invert().multiply(worldQ));
     m.tassel.rotation.x = -p.ax * 0.6;
     m.tassel.rotation.z = -p.az * 0.6;
-    // 火光閃爍、火焰受擺動與風影響而傾斜
+    // 火光閃爍、火焰受擺動與風影響而傾斜。
+    // 每格都從基礎值重新計算，再乘上燈籠狀態（火力、是否熄滅、舉高）——不會因為重複相乘而越來越暗
     const t = this.world.time;
-    m.light.intensity = 4.3 + Math.sin(t * 8) * 0.3 + Math.sin(t * 13.7) * 0.2;
-    m.flame.scale.set(1 - Math.abs(p.az) * 0.3, 0.85 + 0.25 * Math.abs(Math.sin(t * 11.3)), 1 - Math.abs(p.ax) * 0.3);
+    const ls = this.lanternState ?? { heat: 1, lit: true, raised: 0 };
+    const k = ls.lit ? 0.35 + 0.65 * ls.heat : 0;
+    const raised = ls.raised ?? 0;
+    m.light.intensity = (4.3 + Math.sin(t * 8) * 0.3 + Math.sin(t * 13.7) * 0.2) * k * (1 + 0.5 * raised);
+    m.light.distance = 8 + 5 * raised;
+    m.flame.visible = ls.lit;
+    // 火力不足時火焰縮小、搖晃變大（預兆）
+    const weak = ls.lit ? 1 - ls.heat : 0;
+    const wobble = 1 + weak * 0.6 * Math.sin(t * 23);
+    m.flame.scale.set((1 - Math.abs(p.az) * 0.3) * k, (0.85 + 0.25 * Math.abs(Math.sin(t * 11.3))) * k * wobble, (1 - Math.abs(p.ax) * 0.3) * k);
     m.flame.rotation.set(-p.ax * 0.8 - wind.z * 0.08, 0, p.az * 0.8 + wind.x * 0.08);
+    if (m.silk) for (const s of m.silk) s.emissiveIntensity = 1.2 * k * (0.9 + 0.1 * Math.sin(t * 9));
     this.sparkTimer -= dt;
-    if (this.sparkTimer <= 0) {
+    if (ls.lit && this.sparkTimer <= 0) {
       this.sparkTimer = 0.25 + Math.random() * 0.5;
       this.world.burst('spark', m.flame.getWorldPosition(new Vector3()));
     }

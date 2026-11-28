@@ -1,19 +1,19 @@
 /**
  * 自適應畫質（純邏輯，可單元測試）。
  *
- * 依實際幀率在「畫質階梯」上移動：太慢先降場景取樣，再降 3D 細節，最後才把字元變粗。
+ * 依實際幀率在「畫質階梯」上移動：太慢先降解析度縮放，再降 3D 細節（陰影、Bloom、草量）。
  * 為了避免畫質反覆跳動：
  * - 遲滯：低於 downFps 持續 downAfter 秒才降級；高於 upFps 持續 upAfter 秒才升級（兩個門檻有間距）
  * - 冷卻：每次調整後 cooldown 秒內不再調整
  * - 封鎖：升級後很快又被迫降級，代表那一級撐不住 → 那一級封鎖 banSeconds 秒
  */
 export const QUALITY_LADDER = [
-  { quality: 'high', density: 'fine', samples: 4 },
-  { quality: 'high', density: 'fine', samples: 2 },
-  { quality: 'medium', density: 'fine', samples: 2 },
-  { quality: 'medium', density: 'classic', samples: 2 },
-  { quality: 'low', density: 'classic', samples: 2 },
-  { quality: 'low', density: 'classic', samples: 1 },
+  { quality: 'high', scale: 1 },
+  { quality: 'high', scale: 0.85 },
+  { quality: 'medium', scale: 0.85 },
+  { quality: 'medium', scale: 0.7 },
+  { quality: 'low', scale: 0.7 },
+  { quality: 'low', scale: 0.55 },
 ];
 
 export class AdaptiveQuality {

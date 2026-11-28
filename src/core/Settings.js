@@ -5,16 +5,13 @@ export const SETTINGS_SCHEMA = {
   musicVolume: { default: 0.5, type: 'number', min: 0, max: 1 },
   ambienceVolume: { default: 0.6, type: 'number', min: 0, max: 1 },
   sfxVolume: { default: 0.8, type: 'number', min: 0, max: 1 },
-  renderMode: { default: 'hd', type: 'enum', values: ['pure', 'hd', 'hybrid', '3d'] },
-  density: { default: 'adaptive', type: 'enum', values: ['adaptive', 'classic', 'fine', 'ultra', 'cinematic'] },
-  sampling: { default: 'auto', type: 'enum', values: ['auto', '2', '4', '8'] },
-  glyphShape: { default: 'square', type: 'enum', values: ['square', 'tall'] },
-  glyphWeight: { default: 'bold', type: 'enum', values: ['normal', 'bold'] },
-  quality: { default: 'auto', type: 'enum', values: ['auto', 'low', 'medium', 'high'] },
+  quality: { default: 'auto', type: 'enum', values: ['auto', 'low', 'medium', 'high', 'ultra'] },
+  bloom: { default: 'auto', type: 'enum', values: ['auto', 'on', 'off'] },
   pixelRatio: { default: 'auto', type: 'enum', values: ['auto', '1', '1.5', '2'] },
   shadows: { default: 'auto', type: 'enum', values: ['auto', 'off', 'low', 'high'] },
   uiScale: { default: 'normal', type: 'enum', values: ['small', 'normal', 'large'] },
   cameraView: { default: 'explore', type: 'enum', values: ['explore', 'close'] },
+  raiseMode: { default: 'hold', type: 'enum', values: ['hold', 'toggle'] },
   cameraShake: { default: true, type: 'boolean' },
   reduceMotion: { default: false, type: 'boolean' },
   showFps: { default: false, type: 'boolean' },
@@ -29,11 +26,10 @@ function validate(key, value) {
   return undefined;
 }
 
-/** 舊版（2.x）設定轉換成新的選項 */
+/** 4.0 起只有純 3D：舊版（2.x、3.x）的 ASCII 設定全部移除，其餘設定保留 */
+export const OBSOLETE_KEYS = ['ascii', 'renderMode', 'density', 'sampling', 'glyphShape', 'glyphWeight'];
 export function migrate(saved) {
-  if (typeof saved.ascii === 'boolean' && saved.renderMode === undefined) saved.renderMode = saved.ascii ? 'hd' : '3d';
-  delete saved.ascii;
-  if (saved.density === 'normal' || saved.density === 'coarse') saved.density = 'classic';
+  for (const k of OBSOLETE_KEYS) delete saved[k];
   return saved;
 }
 

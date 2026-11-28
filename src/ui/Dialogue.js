@@ -1,5 +1,4 @@
 import { GLOSSARY } from '../data/codex.js';
-import { portraitFor } from '../data/portraits.js';
 import { SPEAKERS } from '../data/story.js';
 
 const MOODS = { laugh: '大笑', surprised: '驚訝', serious: '嚴肅', smile: '微笑', pout: '嘟嘴', sad: '難過' };
@@ -19,7 +18,6 @@ export class Dialogue {
   constructor(bus) {
     this.bus = bus;
     this.layer = document.getElementById('dialogue');
-    this.portraitEl = document.getElementById('dialogue-portrait');
     this.speakerEl = document.getElementById('dialogue-speaker');
     this.textEl = document.getElementById('dialogue-text');
     this.choicesEl = document.getElementById('dialogue-choices');
@@ -129,7 +127,6 @@ export class Dialogue {
     }
     this.speakerEl.hidden = narrator;
     this.speakerEl.style.color = def.color ?? '';
-    this.portraitEl.textContent = def.portrait ? portraitFor(def.portrait, mood) : '';
     this.choicesEl.replaceChildren();
     this.history.push({ name: narrator ? '' : def.name, text });
     if (this.history.length > 200) this.history.splice(0, this.history.length - 200);

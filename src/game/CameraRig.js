@@ -7,7 +7,6 @@ const CLOSE_OFFSET = AZIMUTH.clone().multiplyScalar(4.3).setY(1.9);
 const CLOSE_LOOK_HEIGHT = 0.8;
 const FOCUS_ZOOM = 0.72;
 /** 鏡頭速度低於這個值（公尺／秒）才對齊字元格 */
-const SNAP_SPEED = 0.04;
 const MIN_ZOOM = 0.6;
 const MAX_ZOOM = 1.5;
 
@@ -40,10 +39,8 @@ export class CameraRig {
     this.shakeStrength = 0;
     this.shakeEnabled = true;
     this.time = 0;
-    this.cellRows = 0;
     this.view = 'explore';
     this.camSpeed = 0;
-    this.snapOffset = new Vector3();
     this.viewBlend = 0;
     this.frameA = null;
     this.frameB = new Vector3();
@@ -223,7 +220,7 @@ export class CameraRig {
     this.#prevBase.copy(this.base);
     this.#prevLook.copy(this.lookAt);
     this.camera.position.copy(this.base);
-    const look = this.#snapToCells(dt);
+    const look = this.#tmp.look.copy(this.lookAt);
     if (this.shakeTime > 0) {
       this.shakeTime = Math.max(0, this.shakeTime - dt);
       const amp = this.shakeStrength * (this.shakeTime / this.shakeDuration);
@@ -234,38 +231,6 @@ export class CameraRig {
     this.camera.lookAt(look);
   }
 
-  /**
-   * ASCII 抗閃爍：鏡頭**靜止**時，把鏡頭在畫面平面上的平移慢慢對齊到「一格字元」的整數倍，
-   * 靜止的景物字元就不會閃。鏡頭在移動時完全不對齊——否則鏡頭位置每幾格就被拉到最近的格線，
-   * 角色與背景會一格一格地跳（3.0 初版的抖動問題）。對齊量用平滑過渡加上、移除，不會突然跳。
-   */
-  #snapToCells(dt) {
-    const look = this.#tmp.look.copy(this.lookAt);
-    if (!this.cellRows) return look;
-    const dir = this.#tmp.dir.subVectors(this.lookAt, this.camera.position);
-    const dist = dir.length();
-    if (dist < 1e-3) return look;
-    dir.divideScalar(dist);
-    const right = this.#tmp.right.crossVectors(dir, this.camera.up).normalize();
-    const up = this.#tmp.up.crossVectors(right, dir);
-    const cell = (2 * dist * Math.tan((this.camera.fov * Math.PI) / 360)) / this.cellRows;
-    const r = this.camera.position.dot(right);
-    const u = this.camera.position.dot(up);
-    const desired = this.#tmp.offset
-      .copy(right)
-      .multiplyScalar(Math.round(r / cell) * cell - r)
-      .addScaledVector(up, Math.round(u / cell) * cell - u);
-    if (dt <= 0) {
-      // 靜態截圖（photo）：直接對齊
-      this.snapOffset.copy(desired);
-    } else {
-      const still = this.camSpeed < SNAP_SPEED;
-      if (!still) desired.set(0, 0, 0);
-      this.snapOffset.lerp(desired, 1 - Math.exp(-dt * (still ? 3 : 14)));
-    }
-    this.camera.position.add(this.snapOffset);
-    return look.add(this.snapOffset);
-  }
 
   #prevBase = new Vector3();
   #prevLook = new Vector3();

@@ -51,14 +51,20 @@ function makeLantern() {
   // 上下木蓋與骨架
   body.add(at(new Mesh(new CylinderGeometry(0.07, 0.095, 0.03, 8), wood), 0, 0.12, 0));
   body.add(at(new Mesh(new CylinderGeometry(0.085, 0.07, 0.025, 8), wood), 0, -0.12, 0));
-  for (let i = 0; i < 6; i++) {
-    const a = (i / 6) * Math.PI * 2;
-    body.add(at(new Mesh(new CylinderGeometry(0.004, 0.004, 0.23, 3), wood), Math.cos(a) * 0.098, 0, Math.sin(a) * 0.098));
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2;
+    body.add(at(new Mesh(new CylinderGeometry(0.004, 0.004, 0.23, 4), wood), Math.cos(a) * 0.099, 0, Math.sin(a) * 0.099));
   }
-  // 紗面：自己發光（燈火透出來），上藍下紅
+  // 腰帶（藍紅交界）與上蓋的寶珠
+  body.add(at(new Mesh(new TorusGeometry(0.1, 0.006, 4, 16), wood), 0, 0.017, 0));
+  body.children.at(-1).rotation.x = Math.PI / 2;
+  body.add(at(new Mesh(new CylinderGeometry(0.018, 0.026, 0.03, 8), wood), 0, 0.145, 0));
+  // 紗面（청사초롱：上藍下紅）：自己發光，亮度跟著火力（燈火透出來）
   const silk = (color, glow) => new MeshLambertMaterial({ color, emissive: glow, emissiveIntensity: 1.2, side: DoubleSide });
-  body.add(at(new Mesh(new CylinderGeometry(0.096, 0.1, 0.085, 12, 1, true), silk(0x3d63c9, 0x2a4fb8)), 0, 0.06, 0));
-  body.add(at(new Mesh(new CylinderGeometry(0.1, 0.088, 0.13, 12, 1, true), silk(0xd8402e, 0xff6a32)), 0, -0.045, 0));
+  const silkTop = silk(0x3d63c9, 0x2a4fb8);
+  const silkBottom = silk(0xd8402e, 0xff6a32);
+  body.add(at(new Mesh(new CylinderGeometry(0.096, 0.1, 0.085, 16, 1, true), silkTop), 0, 0.06, 0));
+  body.add(at(new Mesh(new CylinderGeometry(0.1, 0.088, 0.13, 16, 1, true), silkBottom), 0, -0.045, 0));
   // 流蘇
   const tassel = new Group();
   tassel.position.y = -0.135;
@@ -70,7 +76,7 @@ function makeLantern() {
   const light = new PointLight(0xffb066, 4.5, 8, 1.3);
   light.position.set(0, -0.02, 0);
   body.add(light);
-  return { pivot, body, flame, light, tassel };
+  return { pivot, body, flame, light, tassel, silk: [silkTop, silkBottom] };
 }
 
 export function makePlayerModel() {
@@ -88,6 +94,7 @@ export function makePlayerModel() {
     flame: lantern.flame,
     light: lantern.light,
     tassel: lantern.tassel,
+    silk: lantern.silk,
     feet: [model.bones['Foot.L'], model.bones['Foot.R']],
     head: model.bones.Head,
   };

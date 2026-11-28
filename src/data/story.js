@@ -11,14 +11,14 @@ export const CHAPTERS = {
   5: '第五章　月亮回歸',
 };
 
-/** 說話者：名字、肖像（data/portraits.js 的 key）、名字顏色 */
+/** 說話者：名字與名字顏色 */
 export const SPEAKERS = {
-  narrator: { name: '旁白', portrait: null },
-  child: { name: '你', portrait: 'child', color: '#f2bd68' },
-  jangseung: { name: '장승', portrait: 'jangseung', color: '#d65f4c' },
-  grandma: { name: '할머니', portrait: 'grandma', color: '#e2e8ef' },
-  cat: { name: '黑貓', portrait: 'cat', color: '#9fb0c0' },
-  dokkaebi: { name: '도깨비', portrait: 'dokkaebi', color: '#67c5dc' },
+  narrator: { name: '旁白' },
+  child: { name: '你', color: '#f2bd68' },
+  jangseung: { name: '장승', color: '#d65f4c' },
+  grandma: { name: '할머니', color: '#e2e8ef' },
+  cat: { name: '黑貓', color: '#9fb0c0' },
+  dokkaebi: { name: '도깨비', color: '#67c5dc' },
 };
 
 /** 道具：名稱、注音說明、ASCII 圖示、描述 */

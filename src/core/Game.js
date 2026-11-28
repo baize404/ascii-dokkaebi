@@ -66,11 +66,7 @@ export class Game {
     this.perfTimer = 0;
     this.lastTime = 0;
 
-    this.renderer.onResize = (w, h, layout) => {
-      this.rig.setAspect(w / h);
-      // ASCII 模式下鏡頭對齊字元格，靜止的景物不會因鏡頭微動而閃爍
-      this.rig.cellRows = this.renderer.asciiEnabled ? layout.rows : 0;
-    };
+    this.renderer.onResize = (w, h) => this.rig.setAspect(w / h);
     this.renderer.resize();
     this.#applyAllSettings();
     this.#bindEvents();
@@ -95,23 +91,10 @@ export class Game {
   /** 把設定（含自適應的部分）套用到渲染器與場景 */
   #applyRender() {
     const s = this.settings;
-    const step = this.adaptive.step;
-    const density = s.get('density');
-    const sampling = s.get('sampling');
+    const auto = s.get('quality') === 'auto';
     const quality = this.effectiveQuality;
-    // 對話、調查特寫時（鏡頭拉近）自適應模式提高取樣，看清楚手部與表情
-    const closeUp = this.rig.focusAmount > 0.5 && density === 'adaptive' && sampling === 'auto' && quality !== 'low';
-    this.renderer.set({
-      mode: s.get('renderMode'),
-      density: density === 'adaptive' ? step.density : density,
-      samples: sampling === 'auto' ? (density === 'adaptive' ? (closeUp ? Math.min(8, step.samples * 2) : step.samples) : 'auto') : sampling,
-      pixelRatio: s.get('pixelRatio'),
-      quality,
-      shape: s.get('glyphShape'),
-      weight: s.get('glyphWeight'),
-    });
-    this.world.setQuality(quality, s.get('shadows'));
-    this.rig.cellRows = this.renderer.asciiEnabled ? this.renderer.layout.rows : 0;
+    this.renderer.set({ quality, scale: auto ? this.adaptive.step.scale : 1, pixelRatio: s.get('pixelRatio'), bloom: s.get('bloom') });
+    this.world.setQuality(quality === 'ultra' ? 'high' : quality, s.get('shadows'));
   }
 
   #applyAllSettings() {
@@ -122,14 +105,10 @@ export class Game {
     const v = this.settings.get(key);
     const root = document.documentElement;
     switch (key) {
-      case 'renderMode':
-      case 'density':
-      case 'sampling':
       case 'quality':
+      case 'bloom':
       case 'pixelRatio':
       case 'shadows':
-      case 'glyphShape':
-      case 'glyphWeight':
         this.#applyRender();
         break;
       case 'uiScale':
@@ -175,7 +154,7 @@ export class Game {
       if (this.settings.get('showFps')) this.hud.setFps(this.fps, this.renderer.layout);
     }
     const s = this.settings;
-    const adaptive = s.get('quality') === 'auto' || s.get('density') === 'adaptive';
+    const adaptive = s.get('quality') === 'auto';
     if (!adaptive || this.mode !== 'playing' || this.frozen) return;
     if (this.adaptive.update(dt) !== null) this.#applyRender();
     // 鏡頭拉近／拉遠時更新特寫取樣
@@ -317,7 +296,7 @@ export class Game {
     this.panels.openPause([
       ['繼續遊戲', () => this.panels.close(), true],
       ['任務日誌', () => this.#openJournal()],
-      ['設定', () => this.panels.openSettings({ onHelp: () => this.panels.openHelp(this.touch), preview: () => ({ layout: this.renderer.layout, atlas: this.renderer.atlas }) })],
+      ['設定', () => this.panels.openSettings({ onHelp: () => this.panels.openHelp(this.touch) })],
       ['操作說明', () => this.panels.openHelp(this.touch)],
       ['民俗圖鑑', () => this.panels.openCodex(this.codex)],
       ['存檔並回到標題', () => this.returnToTitle()],
@@ -355,7 +334,7 @@ export class Game {
     bus.on('ui:continue', () => this.continueGame());
     bus.on('ui:restart', () => this.newGame());
     bus.on('ui:title', () => this.returnToTitle());
-    bus.on('ui:settings', () => this.panels.openSettings({ onHelp: () => this.panels.openHelp(this.touch), preview: () => ({ layout: this.renderer.layout, atlas: this.renderer.atlas }) }));
+    bus.on('ui:settings', () => this.panels.openSettings({ onHelp: () => this.panels.openHelp(this.touch) }));
     bus.on('ui:help', () => this.panels.openHelp(this.touch));
     bus.on('ui:codex', () => this.panels.openCodex(this.codex));
     bus.on('ui:achievements', () => this.panels.openAchievements(this.achievements));
@@ -389,14 +368,6 @@ export class Game {
       if (this.panels.isOpen || !this.session) return;
       this.audio.unlock();
       this.session.onTap(p);
-    });
-    bus.on('input:toggleAscii', () => {
-      const mode = this.settings.get('renderMode');
-      if (mode === '3d') this.settings.set('renderMode', this.lastAsciiMode ?? 'hd');
-      else {
-        this.lastAsciiMode = mode;
-        this.settings.set('renderMode', '3d');
-      }
     });
     bus.on('input:zoom', (d) => this.rig.zoomBy(d));
     const toggleView = () => {
@@ -444,7 +415,6 @@ export class Game {
     // 凍結（測試工具逐格推進）時由測試工具自己渲染，主迴圈不重複渲染同一格
     if (this.frozen) return;
     updatePointScale(this.world.pointMaterials, this.renderer.sceneHeight, this.camera.fov);
-    this.renderer.pass.setMotion(this.rig.camSpeed ?? 0);
     this.renderer.render(this.scene, this.camera);
     this.#monitorPerformance(dt);
   }
@@ -452,7 +422,6 @@ export class Game {
   /** 測試工具：用目前的鏡頭重畫一格 */
   #renderNow() {
     updatePointScale(this.world.pointMaterials, this.renderer.sceneHeight, this.camera.fov);
-    this.renderer.pass.setMotion(this.rig.camSpeed ?? 0);
     this.renderer.render(this.scene, this.camera);
   }
 
@@ -482,10 +451,8 @@ export class Game {
           litSpots: st?.litSpots() ?? [],
           layout: st?.lanternLayout ?? [],
           objective: document.getElementById('objective-text').textContent,
-          ascii: this.renderer.asciiEnabled,
           quality: this.effectiveQuality,
-          density: this.renderer.density,
-          renderMode: this.renderer.mode,
+          render: { ...this.renderer.layout },
           adaptiveLevel: this.adaptive.level,
           codex: [...this.codex],
           achievements: Object.keys(this.achievements.unlocked),
@@ -513,12 +480,8 @@ export class Game {
         this.rig.update(0);
         this.#renderNow();
       },
-      /** 切換渲染模式與字元密度（等同在設定裡切換） */
-      setRender: (render, density, sampling) => {
-        this.settings.set('renderMode', render === 'ascii' ? 'hd' : render);
-        if (density && density !== '-') this.settings.set('density', density);
-        if (sampling) this.settings.set('sampling', String(sampling));
-      },
+      /** 切換畫質（等同在設定裡切換）；4.0 起只有純 3D */
+      setRender: (quality) => this.settings.set('quality', quality ?? 'high'),
       /** 直接改一個設定（等同在設定面板操作） */
       setSetting: (key, value) => this.settings.set(key, value),
       /** 抖動診斷：主角身上幾個部位的世界座標（相對於腳下的位置） */
@@ -548,15 +511,13 @@ export class Game {
           occlusion: r.occlusion,
           occlusionTarget: r.occlusionTarget ?? 0,
           viewBlend: r.viewBlend,
-          cellRows: r.cellRows,
           mode: r.mode,
           player: s() ? v(s().player.position) : null,
           yaw: s()?.player.yaw ?? null,
-          density: this.renderer.layout?.density ?? null,
-          cols: this.renderer.layout?.cols ?? null,
+          quality: this.renderer.layout?.quality ?? null,
         };
       },
-      layout: () => ({ ...this.renderer.layout, mode: this.renderer.mode, atlas: { pure: this.renderer.atlas.pure, hd: this.renderer.atlas.hd } }),
+      layout: () => ({ ...this.renderer.layout }),
       /** 逐格推進遊戲（凍結狀態下使用；錄影與姿勢截圖用，dt 固定） */
       step: (frames = 1, dt = 1 / 30, move = null, skipRender = false) => {
         const ss = s();

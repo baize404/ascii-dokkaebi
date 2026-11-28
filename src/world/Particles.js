@@ -1,11 +1,34 @@
-import { AdditiveBlending, BufferAttribute, BufferGeometry, Color, Points, ShaderMaterial } from 'three';
+import { AdditiveBlending, BufferAttribute, BufferGeometry, Color, NormalBlending, Points, ShaderMaterial } from 'three';
 
 /**
  * 粒子共用的點材質。點的大小以「世界單位」指定，再依場景貼圖高度換算成像素，
  * 這樣不管 ASCII 格子多大，一顆粒子大約都是一兩個字元。
  */
-export function createPointsMaterial() {
-  return new ShaderMaterial({
+/**
+ * @param o.mode 'additive'（火星、光點，預設）或 'smoke'（一般混合的柔和煙霧，不會在光暈裡變成白色光柱）
+ * @param o.soft 柔邊（純 3D 用）；false 是 2.x／3.x 的硬邊圓點
+ */
+export function createPointsMaterial({ mode = 'additive', soft = false } = {}) {
+  const frag =
+    mode === 'smoke'
+      ? `varying vec3 vColor;
+      void main() {
+        vec2 c = gl_PointCoord - 0.5;
+        float d = dot(c, c) * 4.0;
+        if (d > 1.0) discard;
+        float a = (1.0 - d) * (1.0 - d) * clamp(max(vColor.r, max(vColor.g, vColor.b)) * 1.4, 0.0, 1.0) * 0.42;
+        gl_FragColor = vec4(vec3(0.42, 0.46, 0.53), a);
+      }`
+      : soft
+        ? `varying vec3 vColor;
+      void main() {
+        vec2 c = gl_PointCoord - 0.5;
+        float d = dot(c, c) * 4.0;
+        if (d > 1.0) discard;
+        gl_FragColor = vec4(vColor * (1.0 - d) * (1.0 - d) * 1.6, 1.0);
+      }`
+        : null;
+  const m = new ShaderMaterial({
     uniforms: { uScale: { value: 300 } },
     vertexShader: /* glsl */ `
       attribute vec3 aColor;
@@ -25,10 +48,12 @@ export function createPointsMaterial() {
         if (dot(c, c) > 0.25) discard;
         gl_FragColor = vec4(vColor, 1.0);
       }`,
-    blending: AdditiveBlending,
+    blending: mode === 'smoke' ? NormalBlending : AdditiveBlending,
     transparent: true,
     depthWrite: false,
   });
+  if (frag) m.fragmentShader = frag;
+  return m;
 }
 
 function makePointsGeometry(count) {
@@ -50,7 +75,7 @@ export function updatePointScale(materials, heightPx, fovDeg) {
  * 用「存活的放在陣列前段」的方式管理，不會產生垃圾回收。
  */
 export class ParticleSystem {
-  constructor(max = 900) {
+  constructor(max = 900, materialOptions = undefined) {
     this.max = max;
     this.alive = 0;
     this.vel = new Float32Array(max * 3);
@@ -60,7 +85,7 @@ export class ParticleSystem {
     this.gravity = new Float32Array(max);
     this.drag = new Float32Array(max);
     this.size = new Float32Array(max);
-    this.material = createPointsMaterial();
+    this.material = createPointsMaterial(materialOptions);
     this.geometry = makePointsGeometry(max);
     this.geometry.setDrawRange(0, 0);
     this.pos = this.geometry.attributes.position.array;

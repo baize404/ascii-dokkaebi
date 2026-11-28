@@ -1,35 +1,25 @@
-# 달 도둑 도깨비 · ASCII Dokkaebi 3.0 — The Living Village
+# Dokkaebi: Beyond the Moon 4.0 · 달 도둑 도깨비
 
-韓國民間傳說 × ASCII 藝術 × 3D 探索 × 環境解謎 × 暗黑童話。
+韓國民俗奇幻 × 第三人稱 3D 冒險 × 環境解謎 × 人間與靈界。**4.0 起是純 3D**：ASCII 渲染已經完全移除（第三版保留在 `v3-ascii` 分支）。
 
-**線上遊玩：** https://baize404.github.io/ascii-dokkaebi/
+**4.0 垂直切片「斷橋與燈」：** https://baize404.github.io/ascii-dokkaebi/prototype.html
+**正式版（月亮小偷的村子）：** https://baize404.github.io/ascii-dokkaebi/
 
-那一夜，山村的月亮不見了。提著燈籠的孩子走進沉睡的村落，循著字條、腳印與老人家的屏風，點亮四季的石燈，陪愛玩的도깨비玩兩個遊戲，把月亮要回來。預計遊玩時間 15–25 分鐘，自動存檔。
+## 4.0 垂直切片「斷橋與燈」
 
-3.0 的重點是「活著的村子」：
-- **高精細度 ASCII 渲染**：字元密度、場景取樣、DPR、陰影分開控制，四種渲染模式。
-- **骨架角色**：骨架、蒙皮、動畫混合與 IK，看得到手肘、膝蓋、手腕的動作，衣帶、辮子和燈籠會隨慣性與風擺動。
-- **可以走進去的廚房**：門有鉸鏈，屋頂會淡出。
-- **會動的機關**：轆轤、繩子和水桶連動；石燈的火焰會慢慢形成。
-- **全村共用的風場**：草、樹、火焰、炊煙一起反應。
-- **鏡頭**：近景、調查特寫和對話鏡頭。
+約 10 分鐘的一段完整體驗：提著燈籠的孩子要過一座斷橋，點亮對岸山寺小殿前的石燈。
 
-## 下一步：玩法原型「斷橋與燈」（Gate 1）
+- **月魂燈籠**：火力會被峽谷的風吹弱；在石碑前舉燈、移動燈光，照過的刻紋才會浮現。
+- **靈視**：看見「月亮的另一面」——過去存在的記憶會一片片拼回橋板。畫面、碰撞、尋路看同一個狀態：成形前踩不上去，崩散後才會掉。
+- **風與閘門**：風 7 秒一輪，火盆的煙、草、五色布條、聲音和 HUD 都看得出來；轉動絞盤，繩子、滑輪、擋板一起動，擋板越低風越弱。
+- **鏡頭導演**：探索／第三人稱自由鏡頭、過橋輔助、石碑調查視角、依機構進度切換的動作鏡頭、電影式開場與結局；演出結束回到玩家原本的鏡頭設定。
+- **失敗會教你一件事**：被風吹熄和自己收起靈視是兩種不同的掉落，回饋不同。
 
-**試玩：** https://baize404.github.io/ascii-dokkaebi/prototype.html
+設計文件：[docs/v4/](docs/v4/)（[遊戲設計](docs/v4/GDD.md)、[鏡頭設計](docs/v4/CAMERA.md)、[美術聖經](docs/v4/ART-BIBLE.md)、[審查與決策](docs/v4/REVIEW.md)）。Gate 0／Gate 1 的紀錄在 [docs/beyond-the-moon/](docs/beyond-the-moon/)。
 
-一段 10 分鐘的灰盒關卡，用來測試新的核心玩法：
+## 正式版：月亮小偷的村子（3.x 內容，4.0 起純 3D）
 
-- **月魂燈籠**：舉高燈籠，讓隱藏的圖案顯現。
-- **靈視**：看見過去存在的「記憶」，記憶的橋可以走。
-- **峽谷的風**：風會吹熄燈火；可以看煙抓時機，或關上閘門擋風。
-
-在人間，記憶物件只用青色線條字元畫出來，讓 ASCII 也成為解謎線索。正式版遊戲不受影響。
-
-- 設計與判斷：[docs/beyond-the-moon/](docs/beyond-the-moon/)
-  - Gate 0 審查
-  - 原型規格與謎題設計表
-  - 真人試玩流程
+那一夜，山村的月亮不見了。提著燈籠的孩子走進沉睡的村落，循著字條、腳印與老人家的屏風，點亮四季的石燈，陪愛玩的도깨비玩兩個遊戲，把月亮要回來。預計遊玩時間 15–25 分鐘，自動存檔。骨架角色、可以走進去的廚房、會動的機關、全村共用的風場都保留；4.0 只換掉了渲染（純 3D、抗鋸齒、光暈、動態解析度），鏡頭與互動系統還沒換成切片的新架構（計畫的 Phase 10）。
 
 | 文件 | 內容 |
 | --- | --- |
@@ -37,8 +27,8 @@
 | [docs/DESIGN.md](docs/DESIGN.md) | 遊戲設計（五章流程、謎題與可解性）、美術風格規範、渲染／角色／環境／鏡頭規範 |
 | [docs/TESTING.md](docs/TESTING.md) | 單元、端對端、黑箱模擬玩家測試結果；效能與相容性；已知限制與未完成項目 |
 | [docs/PLAYTEST.md](docs/PLAYTEST.md) | AI 模擬玩家測試紀錄（不是真人測試） |
-| [docs/media/](docs/media/) | 實際遊戲動畫錄影（ASCII 與 3D） |
-| [docs/screenshots/](docs/screenshots/) | 改版前後、各字元密度、ASCII 與 3D 的固定鏡頭比較 |
+| [docs/media/](docs/media/) | 實際遊戲錄影（`v4-*.mp4` 是 4.0 切片；其餘是 3.x 的 ASCII 版本，保留作為紀錄） |
+| [docs/screenshots/](docs/screenshots/) | 固定鏡頭比較截圖（3.x 以前的 ASCII 截圖保留作為紀錄） |
 
 ## 操作
 
@@ -49,9 +39,9 @@
 | 互動 | E／Space，或直接點物件 | 右下角「互動」按鈕，或直接點物件 |
 | 對話 | 點一下或 Space；選項可按數字鍵；點虛線韓文看註解 | 點一下；點虛線韓文看註解 |
 | 鏡頭 | 滾輪縮放；V 切換遠景／近景 | 雙指捏合；右上角「近景／遠景」 |
-| 選單 | J 任務日誌、I 背包、M 地圖、T 切換 ASCII／3D、Esc 暫停 | 右上角按鈕 |
+| 選單 | J 任務日誌、I 背包、M 地圖、Esc 暫停 | 右上角按鈕 |
 
-設定裡可以調整渲染模式（Pure ASCII／HD ASCII／Hybrid／原始 3D）、字元密度（Classic／Fine／Ultra／Cinematic／自適應）、場景取樣、DPR、陰影、畫質、鏡頭視角、震動、減少動畫，每個選項都有說明與即時預覽。
+設定裡可以調整畫質（自動／低／中／高／超高）、光暈、解析度上限、陰影、鏡頭視角、震動、減少動畫。舊版的 ASCII 設定會在讀取時自動移除。切片的操作見 [docs/v4/GDD.md](docs/v4/GDD.md) 第 6 節。
 
 ## 開發
 
@@ -64,11 +54,12 @@ npm test           # 單元測試（Vitest）
 npm run build      # 打包到 dist/
 npm run test:e2e   # 先 build；用本機 Chrome 跑功能情境（可加情境名稱只跑一個，例如 desktopReal）
 npm run test:stability  # 畫面穩定度：鏡頭與角色在各種幀率下不抖動
-npm run test:proto      # Gate 1 原型：真實鍵盤通關、掉落與重試、時機解法、手機版面
+npm run test:proto      # 4.0 切片：真實鍵盤通關、掉落原因、時機解法、鏡頭專項、暫停、點擊、手機版面
 node tests/e2e/blackbox.mjs [keyboard,touch,explorer,newcomer]  # 黑箱模擬玩家：只看畫面文字、不傳送、不用答案介面
-node tests/e2e/record.mjs docs/media [take] [hd|pure|hybrid|3d]  # 逐格錄下實際遊戲動畫
+node tests/e2e/record.mjs docs/media [take] [low|medium|high|ultra]  # 逐格錄下正式版實際遊戲動畫
+node tests/e2e/proto-record.mjs docs/media [take,...] [畫質]       # 錄下 4.0 切片（intro、stele、winch、bridge、fall、ending）
 node tests/e2e/shots.mjs <資料夾> hd:fine,3d:-                  # 固定鏡頭比較截圖
-node tests/e2e/perf.mjs docs/perf/results.json                    # 各渲染模式的幀率與幀時間
+node tests/e2e/perf.mjs docs/perf/results.json                    # 各畫質的幀率與幀時間
 ```
 
 `test:e2e` 預設使用系統安裝的 Chrome；路徑不同時設定 `CHROME_PATH=/path/to/chrome`。截圖存在 `tests/e2e/screenshots/`。網址加上 `?test` 會掛上測試用介面 `window.__dokkaebi`（正式遊玩不會用到）。
@@ -90,8 +81,7 @@ src/
 │   ├── level.js            地圖配置、互動點、地標、地形高度函式
 │   ├── story.js            章節、說話者、道具、配方、線索、題庫、提示、所有對話
 │   ├── codex.js            民俗圖鑑（真實文化／遊戲設定／來源）與韓文詞彙註解
-│   ├── achievements.js     成就條件
-│   └── portraits.js        對話框的 ASCII 肖像
+│   └── achievements.js     成就條件
 ├── game/                   遊戲規則與流程
 │   ├── GameState.js        所有規則與進度（純邏輯、可序列化存檔）
 │   ├── Session.js          一次遊玩：互動狀態、互動分派與鏡頭、區域觸發、教學、地圖與「走過去」、存檔
@@ -117,15 +107,10 @@ src/
 │   ├── Particles.js        粒子池、螢火蟲、星空
 │   ├── Collision.js        圓形 vs 矩形碰撞
 │   └── materials.js        共用材質
-├── render/                 ASCII 渲染
-│   ├── Renderer.js         尺寸、DPR、字元密度、取樣、渲染模式
-│   ├── layout.js           版面計算（純函式）：格數、每格 CSS／實際像素、場景貼圖大小
-│   ├── AsciiPass.js        場景 → 縮減 pass → 分類 pass → 合成 pass
-│   ├── objectId.js         物件遮罩（角色、互動物件、水面）
-│   ├── glyphAtlas.js       依筆畫覆蓋率建立的字元圖集
-│   └── shaders/            reduce、classify、composite、fullscreen
+├── render/Renderer.js      純 3D 渲染：MSAA、ACES、sRGB、柔邊陰影、Bloom、動態解析度
 ├── audio/                  AudioManager（三條音軌）、Sfx、Ambience、Music（全部即時合成）
-├── proto/                  Gate 1 玩法原型：rules（規則，純邏輯）、ProtoWorld（灰盒場景）、main
+├── proto/                  4.0 垂直切片：rules（規則與機構，純邏輯）、CameraDirector、Interaction（互動狀態機）、
+│                           assets（程序化美術）、ProtoWorld（場景）、ProtoAudio、main
 ├── ui/                     Hud、Dialogue、Panels（日誌／背包／地圖／設定／圖鑑／成就／暫停）、
 │                           Minimap（迷霧地圖）、Joystick、Cutscene、Screens
 └── styles/main.css         民俗暗黑童話風格的介面
@@ -135,15 +120,6 @@ tests/
 ```
 
 分工原則：**規則**（GameState）只回傳結果代碼、不碰畫面；**演出**（scenes）依結果播對話與動畫；**場景**（world）只負責畫面；**內容**（data）全部是資料。重新開始時整個 Session（場景、玩家、尋路網格）會被丟棄並釋放資源。
-
-## ASCII 渲染原理
-
-1. 場景用 Three.js 渲染（含即時陰影）到「格數 × 取樣倍率」的離屏貼圖，同時保留深度與物件遮罩。
-2. **縮減 pass**：每格把 N×N 個像素做面積平均，並記下重要物件（角色、互動物件）的覆蓋率與格內深度落差，細小的手指、門環、火焰尖端不會在轉換前就消失。
-3. **分類 pass**：剪影 Sobel、深度二階差分（法線轉折）決定輪廓與方向；ACES 色調映射後轉 sRGB；和上一幀比較，有遲滯才換字，人物移動時不會無規律閃爍。
-4. **合成 pass**：依亮度從實測筆畫覆蓋率排好的字元階梯挑字，輪廓用 `| / - \` 等方向字元。Hybrid 模式再疊上經深度遮擋的連續光暈。按 T 可切回原始 3D。
-
-詳細規範見 [docs/DESIGN.md](docs/DESIGN.md) 第 7 節。
 
 ## 部署（GitHub Pages）
 
@@ -155,8 +131,8 @@ tests/
 
 MIT License。沒有使用任何第三方模型、貼圖、字型檔或音檔：
 
-- **3D 模型**：全部是程式產生（`src/world/`），包括角色骨架與蒙皮。
-- **字元圖集**：執行時用瀏覽器的系統等寬字型畫在 canvas 上。介面字型也是系統字型（CSS font stack），不下載網路字型。
+- **3D 模型**：全部是程式產生（`src/world/`、`src/proto/assets.js`），包括角色骨架與蒙皮。
+- **字型**：介面用系統字型（CSS font stack），不下載網路字型。
 - **音效與音樂**：用 Web Audio 即時合成。
 - **劇情、肖像、民俗圖鑑文字**：原創。民俗內容的參考來源列在遊戲內的民俗圖鑑與 `src/data/codex.js`。
 - **執行期套件**：只有 three（MIT）。開發工具有 Vite、Vitest、Playwright-core。

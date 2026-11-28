@@ -117,7 +117,7 @@ describe('Settings', () => {
     const settings = new Settings({ emit: (t, p) => events.push(p) }, storage);
     expect(settings.set('musicVolume', 3)).toBe(true);
     expect(settings.get('musicVolume')).toBe(1);
-    expect(settings.set('density', 'huge')).toBe(false);
+    expect(settings.set('quality', 'huge')).toBe(false);
     expect(settings.set('reduceMotion', true)).toBe(true);
     expect(events).toHaveLength(2);
     expect(new Settings(null, storage).get('reduceMotion')).toBe(true);
@@ -125,7 +125,7 @@ describe('Settings', () => {
 
   it('壞掉的設定資料會改用預設值', () => {
     const storage = memoryStorage();
-    storage.setItem('ascii-dokkaebi.settings', '{"quality":"ultra","sfxVolume":"loud"}');
+    storage.setItem('ascii-dokkaebi.settings', '{"quality":"extreme","sfxVolume":"loud"}');
     const settings = new Settings(null, storage);
     expect(settings.get('quality')).toBe('auto');
     expect(settings.get('sfxVolume')).toBe(0.8);

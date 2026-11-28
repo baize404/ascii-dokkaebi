@@ -1,0 +1,383 @@
+{
+  "date": "2026-11-28T06:04:41.843Z",
+  "environment": "Linux 容器、Chrome 無頭模式、SwiftShader（CPU 模擬 WebGL）",
+  "passed": 74,
+  "failed": 1,
+  "results": [
+    {
+      "scenario": "keyboard",
+      "ok": true,
+      "label": "走到石碑「眼」前"
+    },
+    {
+      "scenario": "keyboard",
+      "ok": true,
+      "label": "靠近時出現互動提示：「[E] 調查 石碑」"
+    },
+    {
+      "scenario": "keyboard",
+      "ok": true,
+      "label": "只是經過石碑，鏡頭不會被強制拉近"
+    },
+    {
+      "scenario": "keyboard",
+      "ok": true,
+      "label": "按 E 才進入調查視角"
+    },
+    {
+      "scenario": "keyboard",
+      "ok": true,
+      "label": "舉燈移動光照過刻紋：圖案浮現並記入日誌（覆蓋 100%）"
+    },
+    {
+      "scenario": "keyboard",
+      "ok": true,
+      "label": "離開調查：回到原本的第三人稱鏡頭"
+    },
+    {
+      "scenario": "keyboard",
+      "ok": true,
+      "label": "Q 開啟靈視，記憶完全成形（stable）"
+    },
+    {
+      "scenario": "keyboard",
+      "ok": true,
+      "label": "走到溝邊"
+    },
+    {
+      "scenario": "keyboard",
+      "ok": true,
+      "label": "靈視中走過記憶木板到小平台"
+    },
+    {
+      "scenario": "keyboard",
+      "ok": true,
+      "label": "記錄走過記憶木板的時間"
+    },
+    {
+      "scenario": "keyboard",
+      "ok": true,
+      "label": "第二塊石碑「風」顯影並記入日誌"
+    },
+    {
+      "scenario": "keyboard",
+      "ok": true,
+      "label": "Esc 離開調查（不是開暫停選單）"
+    },
+    {
+      "scenario": "keyboard",
+      "ok": true,
+      "label": "走回庭院"
+    },
+    {
+      "scenario": "keyboard",
+      "ok": true,
+      "label": "走到絞盤"
+    },
+    {
+      "scenario": "keyboard",
+      "ok": true,
+      "label": "轉動絞盤：擋板全部降下（closed）"
+    },
+    {
+      "scenario": "keyboard",
+      "ok": false,
+      "label": "轉的時候左手握在把手上（誤差 0.187 公尺）"
+    },
+    {
+      "scenario": "keyboard",
+      "ok": true,
+      "label": "操作絞盤時有動作演出鏡頭"
+    },
+    {
+      "scenario": "keyboard",
+      "ok": true,
+      "label": "演出結束後鏡頭控制權還給玩家"
+    },
+    {
+      "scenario": "keyboard",
+      "ok": true,
+      "label": "走到橋頭"
+    },
+    {
+      "scenario": "keyboard",
+      "ok": true,
+      "label": "靈視中走過記憶的橋（擋板降下，燈沒有熄）"
+    },
+    {
+      "scenario": "keyboard",
+      "ok": true,
+      "label": "過橋方式：gate"
+    },
+    {
+      "scenario": "keyboard",
+      "ok": true,
+      "label": "走到石燈前"
+    },
+    {
+      "scenario": "keyboard",
+      "ok": true,
+      "label": "點亮石燈 → 結局演出 → 結局畫面"
+    },
+    {
+      "scenario": "keyboard",
+      "ok": true,
+      "label": "結局有劇情文字；遊玩紀錄收在可展開區"
+    },
+    {
+      "scenario": "keyboard",
+      "ok": true,
+      "label": "沒有 JavaScript 錯誤"
+    },
+    {
+      "scenario": "fall",
+      "ok": true,
+      "label": "靈視剛開：橋板還在成形，不能走"
+    },
+    {
+      "scenario": "fall",
+      "ok": true,
+      "label": "成形前往前走會停在斷口（z = 2.55，斷口在 2.1）"
+    },
+    {
+      "scenario": "fall",
+      "ok": true,
+      "label": "成形完成後才能走"
+    },
+    {
+      "scenario": "fall",
+      "ok": true,
+      "label": "陣風中走在記憶的橋上"
+    },
+    {
+      "scenario": "fall",
+      "ok": true,
+      "label": "燈被風吹熄 → 掉落原因記為「風」"
+    },
+    {
+      "scenario": "fall",
+      "ok": true,
+      "label": "掉落前橋先崩散（dissolving），畫面和碰撞一致"
+    },
+    {
+      "scenario": "fall",
+      "ok": true,
+      "label": "回到南橋頭；燈籠是熄的"
+    },
+    {
+      "scenario": "fall",
+      "ok": true,
+      "label": "回饋說明原因與下一步：「燈火被風吹熄，記憶的橋散了。火盆的火還燒著，可以重新點燈。」"
+    },
+    {
+      "scenario": "fall",
+      "ok": true,
+      "label": "恢復後立刻可以操作"
+    },
+    {
+      "scenario": "fall",
+      "ok": true,
+      "label": "到火盆重新點燈（走過去、點火、火焰從小長大）"
+    },
+    {
+      "scenario": "fall",
+      "ok": true,
+      "label": "在橋上自己收起靈視 → 掉落原因「自己」，燈還亮著"
+    },
+    {
+      "scenario": "fall",
+      "ok": true,
+      "label": "兩種原因的回饋不同：「你收起了靈視，腳下的記憶跟著散了。燈還亮著。」"
+    },
+    {
+      "scenario": "fall",
+      "ok": true,
+      "label": "沒有 JavaScript 錯誤"
+    },
+    {
+      "scenario": "timing",
+      "ok": true,
+      "label": "看準風停的時機過橋（125 格）"
+    },
+    {
+      "scenario": "timing",
+      "ok": true,
+      "label": "過橋方式記為「看時機」，擋板沒降"
+    },
+    {
+      "scenario": "timing",
+      "ok": true,
+      "label": "沒有 JavaScript 錯誤"
+    },
+    {
+      "scenario": "camera",
+      "ok": true,
+      "label": "預設探索視角"
+    },
+    {
+      "scenario": "camera",
+      "ok": true,
+      "label": "V 切到第三人稱（FOV 58°）"
+    },
+    {
+      "scenario": "camera",
+      "ok": true,
+      "label": "快速連切 7 次：鏡頭連續（每格最大位移 0.05 公尺）"
+    },
+    {
+      "scenario": "camera",
+      "ok": true,
+      "label": "連切奇數次後停在探索視角（狀態一致）"
+    },
+    {
+      "scenario": "camera",
+      "ok": true,
+      "label": "調查結束後恢復原本的模式、方位與俯仰（不是重設成預設）"
+    },
+    {
+      "scenario": "camera",
+      "ok": true,
+      "label": "鏡頭急轉時移動方向平順地跟上（相鄰兩格方向夾角餘弦最小 0.939）"
+    },
+    {
+      "scenario": "camera",
+      "ok": true,
+      "label": "被石碑擋住時鏡頭拉近（距離 1.40）"
+    },
+    {
+      "scenario": "camera",
+      "ok": true,
+      "label": "障礙物離開後退回（距離 5.19）"
+    },
+    {
+      "scenario": "camera",
+      "ok": true,
+      "label": "30 Hz 與 144 Hz 的鏡頭位置差 0.001 公尺"
+    },
+    {
+      "scenario": "camera",
+      "ok": true,
+      "label": "絞盤轉到一半停手：擋板停在半途（41%）"
+    },
+    {
+      "scenario": "camera",
+      "ok": true,
+      "label": "中斷後鏡頭與操作都恢復"
+    },
+    {
+      "scenario": "camera",
+      "ok": true,
+      "label": "掉落時使用恢復鏡頭（停在原地看角色掉下去）"
+    },
+    {
+      "scenario": "camera",
+      "ok": true,
+      "label": "重生後立即回到玩家原本的鏡頭模式（explore）"
+    },
+    {
+      "scenario": "camera",
+      "ok": true,
+      "label": "直式畫面加寬視角（58° vs 50°），不重設方位與模式"
+    },
+    {
+      "scenario": "camera",
+      "ok": true,
+      "label": "沒有 JavaScript 錯誤"
+    },
+    {
+      "scenario": "pause",
+      "ok": true,
+      "label": "暫停時遊玩時間與世界（風）都停住"
+    },
+    {
+      "scenario": "pause",
+      "ok": true,
+      "label": "暫停選單裡的操作說明也是暫停狀態"
+    },
+    {
+      "scenario": "pause",
+      "ok": true,
+      "label": "繼續之後時間恢復"
+    },
+    {
+      "scenario": "pause",
+      "ok": true,
+      "label": "J 開線索日誌（暫停）"
+    },
+    {
+      "scenario": "pause",
+      "ok": true,
+      "label": "失焦時清除按住的鍵（之後只滑行 0.03 公尺）"
+    },
+    {
+      "scenario": "pause",
+      "ok": true,
+      "label": "正式入口先顯示標題畫面"
+    },
+    {
+      "scenario": "pause",
+      "ok": true,
+      "label": "開場演出中不累積遊玩時間"
+    },
+    {
+      "scenario": "pause",
+      "ok": true,
+      "label": "可以略過開場，略過後立刻可以操作並顯示目標"
+    },
+    {
+      "scenario": "pause",
+      "ok": true,
+      "label": "沒有 JavaScript 錯誤"
+    },
+    {
+      "scenario": "click",
+      "ok": true,
+      "label": "點地面：走到點的位置（2.6, 12.3）"
+    },
+    {
+      "scenario": "click",
+      "ok": true,
+      "label": "點石碑：走到石碑前並開始調查"
+    },
+    {
+      "scenario": "click",
+      "ok": true,
+      "label": "點深谷：說明走不過去的原因（「那邊是深谷，走不過去。」）"
+    },
+    {
+      "scenario": "click",
+      "ok": true,
+      "label": "沒有 JavaScript 錯誤"
+    },
+    {
+      "scenario": "phone",
+      "ok": true,
+      "label": "所有按鈕至少 44×44（btn-raise 72×72、btn-spirit 72×72、btn-view 45×44、btn-center 45×44、btn-journal 45×44、btn-pause 44×44、joystick 130×130）"
+    },
+    {
+      "scenario": "phone",
+      "ok": true,
+      "label": "按鈕互不遮擋"
+    },
+    {
+      "scenario": "phone",
+      "ok": true,
+      "label": "點「靈視」按鈕有效"
+    },
+    {
+      "scenario": "phone",
+      "ok": true,
+      "label": "切換模式：點一下就保持舉著"
+    },
+    {
+      "scenario": "phone",
+      "ok": true,
+      "label": "再點一下放下"
+    },
+    {
+      "scenario": "phone",
+      "ok": true,
+      "label": "沒有 JavaScript 錯誤"
+    }
+  ]
+}

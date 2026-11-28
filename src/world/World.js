@@ -1,4 +1,3 @@
-import { preserveMaskBlending, tagObject } from '../render/objectId.js';
 import { Wind } from './Wind.js';
 import { makeCarvedLantern, makeKitchen, makeWellRig } from './buildings.js';
 import { DOOR, DoorController } from './DoorController.js';
@@ -166,8 +165,7 @@ export class World {
     this.#buildTrees(rand);
     this.#buildDetails(rand);
     this.#buildInteractables();
-    this.#tagForAscii();
-    this.#setupShadows();
+        this.#setupShadows();
   }
 
   get bounds() {
@@ -571,12 +569,6 @@ export class World {
     }
   }
 
-  /** 物件遮罩：角色與互動物件在 ASCII 中優先保留輪廓與細節 */
-  #tagForAscii() {
-    for (const c of [this.dokkaebi, this.grandma, this.cat]) tagObject(c.root, 'character');
-    for (const o of [...this.jangseung, this.jars, this.well, this.altar.group, this.ropeGate, ...this.shellJars, ...this.lanterns.map((l) => l.group)]) tagObject(o, 'interactable');
-    preserveMaskBlending(this.scene);
-  }
 
   #updateFacePoints() {
     const L = this.level;

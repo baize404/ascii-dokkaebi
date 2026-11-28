@@ -1,67 +1,26 @@
 import { describe, expect, it } from 'vitest';
 import { AdaptiveQuality, QUALITY_LADDER } from '../../src/core/AdaptiveQuality.js';
-import { migrate } from '../../src/core/Settings.js';
-import { computeLayout, DENSITY_PRESETS } from '../../src/render/layout.js';
-import { buildRamp } from '../../src/render/glyphAtlas.js';
+import { migrate, OBSOLETE_KEYS } from '../../src/core/Settings.js';
+import { QUALITY_PRESETS, resolvePixelRatio } from '../../src/render/Renderer.js';
 
-describe('ASCII 版面：密度、DPR、取樣分開控制', () => {
-  const base = { cssWidth: 1280, cssHeight: 800, deviceRatio: 2, quality: 'high' };
-
-  it('提高 DPR 不會改變字元格數，只改變每格的實際像素', () => {
-    const a = computeLayout({ ...base, density: 'fine', pixelRatio: '1' });
-    const b = computeLayout({ ...base, density: 'fine', pixelRatio: '2' });
-    expect(a.cols).toBeGreaterThan(200);
-    expect(Math.abs(a.cols - b.cols)).toBeLessThanOrEqual(1);
-    expect(b.cellWidth).toBe(a.cellWidth * 2);
-    expect(b.bufferWidth).toBe(a.bufferWidth * 2);
+describe('純 3D 解析度與畫質等級', () => {
+  it('像素密度取裝置、手動上限、等級上限的最小值', () => {
+    expect(resolvePixelRatio({ deviceRatio: 3, quality: 'high' })).toBe(2);
+    expect(resolvePixelRatio({ deviceRatio: 3, quality: 'low' })).toBe(1);
+    expect(resolvePixelRatio({ deviceRatio: 2, pixelRatio: '1.5', quality: 'ultra' })).toBe(1.5);
+    expect(resolvePixelRatio({ deviceRatio: 1, quality: 'ultra' })).toBe(1);
   });
 
-  it('密度越高格數越多：Classic < Fine < Ultra < Cinematic', () => {
-    const cols = ['classic', 'fine', 'ultra', 'cinematic'].map((d) => computeLayout({ ...base, density: d }).cols);
-    expect(cols).toEqual([...cols].sort((x, y) => x - y));
-    expect(new Set(cols).size).toBe(4);
+  it('動態解析度縮放有下限，不會縮到看不清楚', () => {
+    expect(resolvePixelRatio({ deviceRatio: 2, quality: 'high', scale: 0.7 })).toBeCloseTo(1.4);
+    expect(resolvePixelRatio({ deviceRatio: 1, quality: 'low', scale: 0.1 })).toBe(0.5);
   });
 
-  it('每格 CSS 大小符合預設範圍', () => {
-    for (const [d, range] of Object.entries({ classic: [8, 10], fine: [5, 6], ultra: [3, 4], cinematic: [2, 3] })) {
-      const l = computeLayout({ ...base, density: d });
-      const cssCell = l.cellWidth / l.dpr;
-      expect(cssCell).toBeGreaterThanOrEqual(range[0]);
-      expect(cssCell).toBeLessThanOrEqual(range[1]);
-    }
-  });
-
-  it('場景貼圖 = 格數 × 取樣倍率，超過上限時自動降取樣', () => {
-    const l4 = computeLayout({ ...base, density: 'fine', samples: '4' });
-    expect(l4.sceneWidth).toBe(l4.cols * 4);
-    const big = computeLayout({ ...base, density: 'cinematic', samples: '8', quality: 'low' });
-    expect(big.samples).toBeLessThan(8);
-    expect(big.sceneWidth * big.sceneHeight).toBeLessThanOrEqual(600_000);
-  });
-
-  it('手機短邊小於 600 時使用小螢幕的格子大小', () => {
-    const phone = computeLayout({ cssWidth: 390, cssHeight: 844, deviceRatio: 3, density: 'classic', quality: 'medium' });
-    expect(phone.cssCell).toBe(DENSITY_PRESETS.classic.css[1]);
-    expect(phone.dpr).toBe(1.5);
-  });
-
-  it('直長格子：列數變少、直向取樣變多', () => {
-    const sq = computeLayout({ ...base, density: 'fine', samples: '4' });
-    const tall = computeLayout({ ...base, density: 'fine', samples: '4', shape: 'tall' });
-    expect(tall.rows).toBeLessThan(sq.rows);
-    expect(tall.samplesY).toBeGreaterThan(tall.samplesX);
-  });
-});
-
-describe('字元亮度階梯', () => {
-  it('依覆蓋率等距挑選、由暗到亮排序、第一個是空白', () => {
-    const coverage = new Map([[' ', 0], ['.', 0.05], [':', 0.1], ['-', 0.12], ['+', 0.2], ['*', 0.3], ['#', 0.5], ['@', 0.6], ['M', 0.58]]);
-    const ramp = buildRamp([...coverage.keys()].join(''), coverage, 5);
-    expect(ramp[0]).toBe(' ');
-    expect(ramp.length).toBe(5);
-    const covs = [...ramp].map((g) => coverage.get(g));
-    expect(covs).toEqual([...covs].sort((a, b) => a - b));
-    expect(ramp.at(-1)).toBe('@');
+  it('越高等級的陰影越精細，只有高、超高預設開光暈', () => {
+    const order = ['low', 'medium', 'high', 'ultra'];
+    const shadows = order.map((q) => QUALITY_PRESETS[q].shadow);
+    expect(shadows).toEqual([...shadows].sort((a, b) => a - b));
+    expect(order.filter((q) => QUALITY_PRESETS[q].bloom)).toEqual(['high', 'ultra']);
   });
 });
 
@@ -114,8 +73,15 @@ describe('自適應畫質：遲滯與冷卻', () => {
 });
 
 describe('設定遷移', () => {
-  it('2.x 的 ascii 開關與密度轉成新選項', () => {
-    expect(migrate({ ascii: false, density: 'normal' })).toEqual({ renderMode: '3d', density: 'classic' });
-    expect(migrate({ ascii: true, density: 'fine' })).toEqual({ renderMode: 'hd', density: 'fine' });
+  it('2.x、3.x 的 ASCII 設定全部移除，其他設定保留', () => {
+    const old = { ascii: true, renderMode: 'hd', density: 'fine', sampling: '4', glyphShape: 'tall', glyphWeight: 'bold', musicVolume: 0.3, quality: 'medium' };
+    expect(migrate(old)).toEqual({ musicVolume: 0.3, quality: 'medium' });
+    expect(OBSOLETE_KEYS).toContain('renderMode');
+  });
+
+  it('動態解析度階梯：先降縮放再降細節', () => {
+    expect(QUALITY_LADDER.every((s) => s.scale > 0 && s.scale <= 1)).toBe(true);
+    expect(QUALITY_LADDER[1].quality).toBe(QUALITY_LADDER[0].quality);
+    expect(QUALITY_LADDER[1].scale).toBeLessThan(QUALITY_LADDER[0].scale);
   });
 });

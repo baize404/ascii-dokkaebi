@@ -48,6 +48,10 @@ async function openPage(browser, url, context, name) {
   page.on('pageerror', (e) => page.errors.push(`${e.message}`));
   page.on('console', (m) => m.type() === 'error' && page.errors.push(m.text()));
   page.shot = (label) => page.screenshot({ path: join(shots, `${name}-${label}.png`) });
+  // 測試機是 CPU 模擬的 WebGL：沒有設定時用低畫質跑邏輯測試（畫質切換另外測）。E2E_QUALITY 可以覆寫
+  await page.addInitScript((q) => {
+    if (!localStorage.getItem('ascii-dokkaebi.settings')) localStorage.setItem('ascii-dokkaebi.settings', JSON.stringify({ quality: q }));
+  }, process.env.E2E_QUALITY ?? 'low');
   await page.goto(`${url}?test`);
   await page.waitForTimeout(1200);
   return page;
@@ -66,10 +70,13 @@ async function startNewGame(page, { touch = false, skipOpening = true } = {}) {
 
 /** 對話：一路點完；遇到選項時依 picks 依序選（字串比對或函式回傳索引） */
 async function finishDialogue(page, picks = []) {
-  const deadline = Date.now() + 150000;
+  // 4.0 純 3D 在 SwiftShader（CPU 模擬）上每格比 ASCII 版慢很多；祭壇一整段（三題＋兩輪甕遊戲＋結局）可能要好幾分鐘
+  const deadline = Date.now() + 480000;
+  const trail = [];
   while (Date.now() < deadline) {
     await page.waitForTimeout(110);
     const s = await state(page);
+    trail.push(`${((deadline - Date.now()) / 1000).toFixed(0)}s ${s.dialogueOpen ? 'D' : '-'}${s.busy ? 'B' : '-'} ${(await page.locator('#dialogue-text').textContent()).slice(0, 14)}`);
     if (!s.dialogueOpen && !s.busy) return;
     const buttons = page.locator('#dialogue-choices button:not([disabled])');
     if ((await buttons.count()) > 0) {
@@ -87,6 +94,7 @@ async function finishDialogue(page, picks = []) {
   }
   const s = await state(page);
   await page.shot('stuck');
+  console.log('    對話紀錄（最後 25 筆）：\n      ' + trail.slice(-25).join('\n      '));
   throw new Error(`對話沒有結束：mode=${s.mode} busy=${s.busy} dialogue=${s.dialogueOpen} 文字=「${await page.locator('#dialogue-text').textContent()}」 選項=${await page.locator('#dialogue-choices button').count()} 錯誤=${page.errors.join(' | ')}`);
 }
 
@@ -307,21 +315,20 @@ async function desktopFull(browser, url) {
   await page.waitForTimeout(800);
   await page.locator('#btn-settings-title').click();
   await page.locator('#panel-tabs button', { hasText: '畫面' }).click();
-  await page.locator('[data-setting="density"] button', { hasText: 'Classic' }).click();
   await page.locator('[data-setting="quality"] button', { hasText: '低' }).click();
-  await page.locator('[data-setting="renderMode"] button', { hasText: '原始 3D' }).click();
+  await page.locator('[data-setting="bloom"] button', { hasText: '關' }).click();
   await page.waitForTimeout(150);
-  const preview = await page.locator('.glyph-preview').textContent();
+  const settingsText = await page.locator('#panel-body').textContent();
   await page.locator('#panel-tabs button', { hasText: '介面與無障礙' }).click();
   await page.locator('[data-setting="reduceMotion"] button', { hasText: '開' }).click();
   await page.shot('settings');
   s = await state(page);
-  check(s.density === 'classic' && s.quality === 'low' && !s.ascii && s.renderMode === '3d', '設定立即套用（字元密度、畫質、3D 模式）');
-  check(/Pure ASCII 階梯 \d+ 階/.test(preview) && /\d+×\d+ 格/.test(preview), '設定裡的字元圖集預覽顯示實際階梯與格數');
+  check(s.quality === 'low' && s.render.quality === 'low' && s.render.bloom === false, '設定立即套用（畫質、光暈）');
+  check(!/ASCII|字元密度|渲染模式/.test(settingsText), '設定面板不再出現 ASCII 選項');
   await page.reload();
   await page.waitForTimeout(1200);
   s = await state(page);
-  check(s.density === 'classic' && s.quality === 'low' && !s.ascii && (await page.evaluate(() => document.documentElement.dataset.reduceMotion)) === 'true', '設定在重新整理後保留');
+  check(s.quality === 'low' && s.render.bloom === false && (await page.evaluate(() => document.documentElement.dataset.reduceMotion)) === 'true', '設定在重新整理後保留');
   await page.locator('#btn-settings-title').click();
   await page.locator('#panel-tabs button', { hasText: '介面與無障礙' }).click();
   await page.locator('#panel-body button', { hasText: '恢復預設值' }).click();
@@ -335,20 +342,18 @@ async function desktopFull(browser, url) {
   await page.keyboard.press('t');
   await page.waitForTimeout(200);
   const after = await state(page);
-  check(before.ascii !== after.ascii && after.player.x === before.player.x && after.chapter === before.chapter, 'T 鍵切換 ASCII／3D，玩家位置與進度不變');
-  // 四種渲染模式輪流切換：遊戲狀態不受影響，沒有錯誤
-  for (const mode of ['pure', 'hd', 'hybrid', '3d', 'hd']) await api(page, 'setRender', [mode]);
-  await page.waitForTimeout(300);
-  const modes = await state(page);
-  check(modes.renderMode === 'hd' && modes.player.x === before.player.x, '四種渲染模式切換不會重設玩家位置');
-  for (const d of ['classic', 'fine', 'ultra', 'cinematic']) {
-    await api(page, 'setRender', ['hd', d, '4']);
+  check(JSON.stringify(after.render) === JSON.stringify(before.render) && after.player.x === before.player.x, 'T 鍵不再切換任何渲染模式（4.0 只有純 3D）');
+  // 畫質輪流切換：遊戲狀態不受影響，沒有錯誤
+  for (const q of ['low', 'medium', 'high', 'ultra']) {
+    await api(page, 'setRender', [q]);
     await page.waitForTimeout(250);
-    await page.screenshot({ path: join(shots, `density-${d}.png`) });
+    await page.screenshot({ path: join(shots, `quality-${q}.png`) });
   }
-  const layout = await api(page, 'layout');
-  check(layout.cols > 0 && layout.sceneWidth === layout.cols * layout.samplesX, `Cinematic 密度：${layout.cols}×${layout.rows} 格，場景貼圖 ${layout.sceneWidth}×${layout.sceneHeight}`);
-  await api(page, 'setRender', ['hd', 'adaptive', 'auto']);
+  const modes = await state(page);
+  check(modes.render.quality === 'ultra' && modes.render.bloom === true && modes.player.x === before.player.x, '四種畫質切換不會重設玩家位置，超高畫質開啟光暈');
+  const hasAscii = await page.evaluate(() => [...document.querySelectorAll('pre, [id*=ascii], .glyph-preview')].map((e) => e.id || e.className));
+  check(hasAscii.length === 0, `頁面上沒有 ASCII 元素${hasAscii.length ? '：' + hasAscii.join(',') : ''}`);
+  await api(page, 'setRender', ['auto']);
   check(page.errors.length === 0, `沒有 JavaScript 錯誤${page.errors.length ? '：' + page.errors.join(' | ') : ''}`);
   await page.close();
 }

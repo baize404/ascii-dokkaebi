@@ -367,20 +367,6 @@ button:disabled {
   border: 1px solid var(--line);
   cursor: default;
 }
-.portrait {
-  margin: 0;
-  flex: none;
-  font-family: var(--mono);
-  font-size: 0.72rem;
-  line-height: 1.08;
-  color: var(--gold);
-  align-self: center;
-  min-width: 8.5em;
-  text-align: left;
-}
-.portrait:empty {
-  display: none;
-}
 .dialogue .body {
   flex: 1;
   min-width: 0;
@@ -478,29 +464,26 @@ button:disabled {
   flex-direction: column;
   align-items: center;
 }
-.ascii-title {
+.game-title {
   margin: 0;
-  font-family: var(--mono);
-  font-size: clamp(4px, 1.25vw, 10px);
-  line-height: 1.05;
-  color: var(--wisp);
-  text-shadow: 0 0 10px rgba(103, 197, 220, 0.5);
-  text-align: left;
-  animation: flicker 5s steps(1) infinite;
+  font-family: var(--serif);
+  font-size: clamp(3.4rem, 12vw, 7.5rem);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: var(--paper, #efe6d2);
+  text-shadow: 0 0 28px rgba(242, 170, 90, 0.45), 0 2px 0 rgba(0, 0, 0, 0.6);
+  animation: title-breathe 6s ease-in-out infinite;
 }
-@keyframes flicker {
+@keyframes title-breathe {
   0%,
   100% {
-    opacity: 1;
+    text-shadow: 0 0 28px rgba(242, 170, 90, 0.45), 0 2px 0 rgba(0, 0, 0, 0.6);
   }
-  41% {
-    opacity: 0.85;
-  }
-  42% {
-    opacity: 1;
+  50% {
+    text-shadow: 0 0 40px rgba(242, 170, 90, 0.7), 0 2px 0 rgba(0, 0, 0, 0.6);
   }
 }
-:root[data-reduce-motion='true'] .ascii-title,
+:root[data-reduce-motion='true'] .game-title,
 :root[data-reduce-motion='true'] .prompt,
 :root[data-reduce-motion='true'] .objective.flash {
   animation: none;
@@ -885,10 +868,6 @@ button:disabled {
     width: 84px;
     height: 90px;
   }
-  .portrait {
-    font-size: 0.55rem;
-    min-width: 6.4em;
-  }
   .dialogue {
     padding: 0.7em 0.8em 0.5em;
     gap: 0.6em;
@@ -898,9 +877,6 @@ button:disabled {
   }
 }
 @media (max-height: 500px) {
-  .portrait {
-    display: none;
-  }
   .dialogue .text {
     min-height: 2em;
     font-size: 0.92rem;
@@ -945,11 +921,6 @@ button:disabled {
 .setting-hint { margin: 0 0 6px; font-size: 0.78em; color: rgba(226, 232, 239, 0.62); line-height: 1.45; }
 .setting-head { margin: 14px 0 4px; font-family: var(--serif, serif); font-size: 0.95em; color: #f2bd68; letter-spacing: 0.08em; }
 .setting-head:first-child { margin-top: 0; }
-.glyph-preview {
-  margin: 6px 0 10px; padding: 10px 12px; white-space: pre-wrap; word-break: break-all;
-  font: 12px/1.5 "DejaVu Sans Mono", Menlo, Consolas, monospace; color: #e2e8ef;
-  background: rgba(8, 13, 22, 0.75); border: 1px solid rgba(242, 189, 104, 0.35);
-}
 .seg { flex-wrap: wrap; }
 
 /* 地圖：看過的地點（點一下自動走過去） */

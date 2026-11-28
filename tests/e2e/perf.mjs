@@ -10,16 +10,13 @@ import { chromium } from 'playwright-core';
 import { preview } from 'vite';
 
 const out = process.argv[2] ?? 'docs/perf/results.json';
+// [畫質, 光暈, 陰影]：4.0 只有純 3D
 const CASES = [
-  ['3d', '-', 'high'],
-  ['hd', 'classic', 'high'],
-  ['hd', 'fine', 'high'],
-  ['hd', 'ultra', 'high'],
-  ['hd', 'cinematic', 'high'],
-  ['pure', 'fine', 'high'],
-  ['hybrid', 'fine', 'high'],
-  ['hd', 'fine', 'low'],
-  ['hd', 'classic', 'low'],
+  ['low', 'off', 'auto'],
+  ['medium', 'off', 'auto'],
+  ['high', 'auto', 'auto'],
+  ['high', 'off', 'auto'],
+  ['ultra', 'auto', 'auto'],
 ];
 const VIEWPORTS = [
   { name: '桌面 1280×800 DPR1', viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1 },
@@ -45,12 +42,13 @@ for (const vp of VIEWPORTS) {
     const ext = gl?.getExtension('WEBGL_debug_renderer_info');
     return ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : 'unknown';
   });
-  for (const [render, density, quality] of CASES) {
-    await page.evaluate(([r, d, q]) => {
+  for (const [quality, render, density] of CASES) {
+    await page.evaluate(([q, b, sh]) => {
       const api = window.__dokkaebi;
       api.setSetting('quality', q);
-      api.setRender(r, d, 'auto');
-    }, [render, density, quality]);
+      api.setSetting('bloom', b);
+      api.setSetting('shadows', sh);
+    }, [quality, render, density]);
     await page.waitForTimeout(2000);
     const m = await page.evaluate(
       () =>
@@ -74,12 +72,9 @@ for (const vp of VIEWPORTS) {
     const layout = await page.evaluate(() => window.__dokkaebi.layout());
     const row = {
       viewport: name,
-      render,
-      density,
       quality,
-      cells: render === '3d' ? null : `${layout.cols}×${layout.rows}`,
-      samples: render === '3d' ? null : `${layout.samplesX}×${layout.samplesY}`,
-      sceneTexture: render === '3d' ? null : `${layout.sceneWidth}×${layout.sceneHeight}`,
+      bloom: layout.bloom,
+      buffer: `${layout.width}×${layout.height}`,
       dpr: layout.dpr,
       fps: +m.fps.toFixed(1),
       avgMs: +m.avgMs.toFixed(1),
@@ -87,7 +82,7 @@ for (const vp of VIEWPORTS) {
       heapMB: m.heapMB === null ? null : +m.heapMB.toFixed(1),
     };
     results.push(row);
-    console.log(`${name}｜${render} ${density} ${quality}｜${row.cells ?? '-'} 格、取樣 ${row.samples ?? '-'}｜${row.fps} FPS（平均 ${row.avgMs} ms、p95 ${row.p95Ms} ms）｜heap ${row.heapMB} MB`);
+    console.log(`${name}｜${quality} 光暈${layout.bloom ? '開' : '關'}｜${row.buffer} DPR ${row.dpr}｜${row.fps} FPS（平均 ${row.avgMs} ms、p95 ${row.p95Ms} ms）｜heap ${row.heapMB} MB`);
   }
   results.push({ viewport: name, gpu });
   await page.close();

@@ -14,7 +14,6 @@ const KEY_EVENTS = {
   KeyE: 'input:action',
   Space: 'input:action',
   Enter: 'input:action',
-  KeyT: 'input:toggleAscii',
   KeyH: 'input:help',
   KeyJ: 'input:journal',
   KeyI: 'input:inventory',

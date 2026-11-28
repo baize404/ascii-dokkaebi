@@ -3,55 +3,105 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="theme-color" content="#080d16" />
-    <title>斷橋與燈｜ASCII Dokkaebi 玩法原型（Gate 1）</title>
+    <meta name="theme-color" content="#070c17" />
+    <title>斷橋與燈｜Dokkaebi: Beyond the Moon 4.0 垂直切片</title>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="/src/proto/proto.css" />
   </head>
   <body>
     <canvas id="game" aria-label="遊戲畫面"></canvas>
+    <div id="letterbox" aria-hidden="true"><i></i><i></i></div>
     <div id="hud">
-      <div id="lamp-status" aria-label="燈籠狀態">
-        <span class="flame" aria-hidden="true"></span>
-        <span class="bar"><i id="flame-bar"></i></span>
-        <span class="spirit-flag">靈視</span>
-        <span class="wind-flag">風</span>
+      <div id="lamp" aria-label="月魂燈籠" title="月魂燈籠：火力、靈視、風">
+        <span class="ring" aria-hidden="true"><span class="flame"></span></span>
+        <span class="labels"><b class="spirit-flag">靈視</b><b class="out-flag">熄了</b><b class="weak-flag">火弱</b></span>
       </div>
+      <div id="wind" hidden aria-label="峽谷的風"><span class="streaks" aria-hidden="true"><i></i><i></i><i></i></span><span class="txt"></span></div>
+      <p id="objective" role="status"></p>
       <div class="top-buttons">
-        <button id="btn-view" type="button" title="切換鏡頭（V）">近景</button>
-        <button id="btn-help" type="button" title="操作說明">?</button>
+        <button id="btn-view" type="button" title="切換探索／第三人稱鏡頭（V）">近景</button>
+        <button id="btn-center" type="button" title="鏡頭置中（C）">置中</button>
+        <button id="btn-journal" type="button" title="線索日誌（J）">日誌</button>
+        <button id="btn-pause" type="button" title="暫停（Esc）" aria-label="暫停">❚❚</button>
       </div>
       <div id="tip" role="status" hidden></div>
       <div id="caption" role="status" hidden></div>
       <button id="prompt" type="button" hidden></button>
+      <div id="inspect-ui" hidden>
+        <p id="inspect-hint"></p>
+        <button id="btn-exit-inspect" type="button">離開調查</button>
+      </div>
       <div id="action-buttons">
-        <button id="btn-raise" type="button" title="按住舉高燈籠（F）">舉燈</button>
+        <button id="btn-raise" type="button" title="舉高燈籠（F）">舉燈</button>
         <button id="btn-spirit" type="button" title="切換靈視（Q）">靈視</button>
       </div>
       <div id="joystick" class="joystick" hidden aria-hidden="true"><div class="knob"></div></div>
     </div>
+    <button id="btn-skip" type="button">略過 ›</button>
     <div id="fade"></div>
-    <section id="intro" class="sheet">
+
+    <section id="title" class="sheet title">
+      <p class="kicker">Dokkaebi: Beyond the Moon</p>
       <h1>斷橋與燈</h1>
-      <p class="sub">ASCII Dokkaebi 玩法原型（Gate 1）</p>
-      <p>這是一段灰盒測試關卡，用來確認「月魂燈籠、靈界、風」這組規則好不好玩。外觀還很簡單，請專心在玩法上。</p>
-      <p>目標：到峽谷對面，點亮祠堂的石燈。</p>
-      <table class="keys">
-        <tr><th>移動</th><td>WASD／方向鍵，或點地面</td><td>搖桿，或點地面</td></tr>
-        <tr><th>互動</th><td>E</td><td>「互動」按鈕</td></tr>
-        <tr><th>舉起燈籠</th><td>按住 F</td><td>按住「舉燈」</td></tr>
-        <tr><th>靈視</th><td>Q</td><td>「靈視」</td></tr>
-        <tr><th>鏡頭</th><td>V 遠景／近景、T ASCII／3D</td><td>右上角</td></tr>
-      </table>
-      <button id="btn-start" type="button">開始</button>
+      <p class="sub">月亮的另一面 · 4.0 垂直切片</p>
+      <button id="btn-start" type="button" class="primary">開始</button>
+      <p class="muted">建議戴耳機（關掉聲音也能玩）。<a href="./">回到正式版遊戲</a></p>
+    </section>
+
+    <section id="pause" class="sheet" hidden>
+      <h2>暫停</h2>
+      <div class="menu">
+        <button id="btn-resume" type="button" class="primary">繼續</button>
+        <button id="btn-help" type="button">操作說明</button>
+        <button id="btn-restart" type="button">從頭開始</button>
+      </div>
+      <h3>設定</h3>
+      <div class="settings">
+        <label>舉燈方式<select data-setting="raiseMode"><option value="hold">按住舉燈，放開放下</option><option value="toggle">點一下切換</option></select></label>
+        <label>音樂<input type="range" min="0" max="1" step="0.05" data-setting="musicVolume" /></label>
+        <label>環境音<input type="range" min="0" max="1" step="0.05" data-setting="ambienceVolume" /></label>
+        <label>互動音效<input type="range" min="0" max="1" step="0.05" data-setting="sfxVolume" /></label>
+        <label>畫質<select data-setting="quality"><option value="auto">自動</option><option value="low">低</option><option value="medium">中</option><option value="high">高</option><option value="ultra">超高</option></select></label>
+        <label>光暈<select data-setting="bloom"><option value="auto">自動</option><option value="on">開</option><option value="off">關</option></select></label>
+        <label class="check"><input type="checkbox" data-setting="reduceMotion" />減少鏡頭動態（縮短轉場）</label>
+      </div>
       <p class="muted"><a href="./">回到正式版遊戲</a></p>
     </section>
+
+    <section id="help" class="sheet" hidden>
+      <h2>操作說明</h2>
+      <table class="keys">
+        <tr><th></th><th>電腦</th><th>手機</th></tr>
+        <tr><th>移動</th><td>WASD／方向鍵，或點地面</td><td>左下搖桿，或點地面</td></tr>
+        <tr><th>跑步</th><td>按住 Shift</td><td>搖桿推到底</td></tr>
+        <tr><th>轉鏡頭／縮放</th><td>拖曳滑鼠、滾輪</td><td>右邊單指滑動、雙指縮放</td></tr>
+        <tr><th>互動</th><td>E（或點物件）</td><td>互動按鈕（或點物件）</td></tr>
+        <tr><th>舉起燈籠</th><td>F</td><td>舉燈</td></tr>
+        <tr><th>靈視</th><td>Q</td><td>靈視</td></tr>
+        <tr><th>鏡頭</th><td>V 探索／第三人稱、C 置中</td><td>右上角</td></tr>
+        <tr><th>日誌／暫停</th><td>J、Esc</td><td>右上角</td></tr>
+      </table>
+      <button id="btn-help-back" type="button">返回</button>
+    </section>
+
+    <section id="journal" class="sheet" hidden>
+      <h2>線索日誌</h2>
+      <p class="objective-line">目前目標：<span id="journal-objective"></span></p>
+      <ul id="journal-list"></ul>
+      <button id="btn-journal-close" type="button" class="primary">關閉</button>
+    </section>
+
     <section id="end" class="sheet" hidden>
-      <h1>石燈亮了</h1>
-      <p>原型到這裡結束。謝謝試玩！如果你是測試觀察員，請把下面的數字抄進觀察表。</p>
-      <table id="end-stats"></table>
-      <button id="btn-again" type="button">再玩一次</button>
-      <p class="muted"><a href="./">回到正式版遊戲</a></p>
+      <h2>石燈亮了</h2>
+      <p class="story">火光沿著屋簷一盞一盞亮起來。斷橋上，青色的記憶還在月光下輕輕閃著——小寺記得這座橋原本的樣子。<br />可是月亮呢？偷走月亮的도깨비，還在山的另一邊。</p>
+      <div class="menu">
+        <button id="btn-again" type="button" class="primary">再玩一次</button>
+        <a class="button" href="./">前往正式版：月亮小偷的村子</a>
+      </div>
+      <details>
+        <summary>遊玩紀錄（給試玩觀察員）</summary>
+        <table id="end-stats"></table>
+      </details>
     </section>
     <script type="module" src="/src/proto/main.js"></script>
   </body>

@@ -1,4 +1,3 @@
-import { preserveMaskBlending, tagObject } from '../render/objectId.js';
 import { Raycaster, Vector2, Vector3 } from 'three';
 import { CODEX } from '../data/codex.js';
 import { heightAt, LEVEL } from '../data/level.js';
@@ -52,8 +51,6 @@ export class Session {
     this.player = new Player(this.world, start, this.nav);
     if (player) this.player.setPosition(player.x, player.z, player.yaw);
     this.player.onStep = (surface) => game.audio.sfx.step(surface);
-    tagObject(this.player.object, 'character');
-    preserveMaskBlending(this.player.object);
     this.explored = new ExploredGrid(extra.explored);
     this.tutorial = new Set(Array.isArray(extra.tutorial) ? extra.tutorial : []);
     /** 玩家看過（曾經在附近）的互動地點：地圖上可以點選後自動走過去 */

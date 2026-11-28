@@ -243,6 +243,24 @@ export function playerClips(opts = {}) {
         ...grip('L', 0.9 * up),
       });
     }),
+    // 掉落：腳下一空，手往上抓、身體後仰（循環，直到畫面淡出）
+    Fall: clip('Fall', 0.7, (t) => withBase({
+      'Pelvis@': [0, 0, 0],
+      Spine: [-0.35, 0.08 * Math.sin(TAU * t), 0],
+      Chest: [-0.15, 0, 0],
+      Head: [-0.35, 0, 0],
+      ...both({ 'Hip.L': [-0.5, 0, 0.1], 'Knee.L': [0.9, 0, 0] }),
+      'Shoulder.L': [-2.4 + 0.3 * Math.sin(TAU * t), 0, 0.5],
+      'Elbow.L': [-0.4, 0, 0],
+      ...grip('L', 0.2),
+    }), { loop: true }),
+    // 回到安全的地方後起身：半蹲 → 站直、甩甩頭
+    Recover: clip('Recover', 1.1, kf([
+      [0, { 'Pelvis@': [0, -0.28, 0], Spine: [0.45, 0, 0], Chest: [0.15, 0, 0], Head: [0.2, 0, 0], ...both({ 'Hip.L': [-1.2, 0, 0.1], 'Knee.L': [1.6, 0, 0], 'Ankle.L': [-0.3, 0, 0] }), 'Shoulder.L': [-0.4, 0, 0.2], 'Elbow.L': [-0.6, 0, 0] }],
+      [0.45, { 'Pelvis@': [0, -0.1, 0], Spine: [0.2, 0, 0], Head: [0.05, 0.25, 0], ...both({ 'Hip.L': [-0.45, 0, 0.05], 'Knee.L': [0.6, 0, 0] }) }],
+      [0.7, { Head: [0, -0.25, 0] }],
+      [1, {}],
+    ])),
   };
 }
 
@@ -298,4 +316,4 @@ export function dokkaebiClips() {
 }
 
 /** 主角需要的全部動作（計畫規格） */
-export const PLAYER_STATES = ['Idle', 'Walk', 'Run', 'StartMoving', 'StopMoving', 'TurnLeft', 'TurnRight', 'Crouch', 'Pickup', 'Inspect', 'Reach', 'Grab', 'Release', 'OpenDoor', 'CloseDoor', 'UseKey', 'CrankWell', 'LightLantern', 'OfferItem', 'Talk', 'Startled', 'Cheer'];
+export const PLAYER_STATES = ['Idle', 'Walk', 'Run', 'StartMoving', 'StopMoving', 'TurnLeft', 'TurnRight', 'Crouch', 'Pickup', 'Inspect', 'Reach', 'Grab', 'Release', 'OpenDoor', 'CloseDoor', 'UseKey', 'CrankWell', 'LightLantern', 'OfferItem', 'Talk', 'Startled', 'Cheer', 'Fall', 'Recover'];
