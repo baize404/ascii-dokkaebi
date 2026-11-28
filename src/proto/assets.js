@@ -1269,9 +1269,9 @@ export function makeStoneLantern() {
 /** 記憶材質：半透明、冷色自發光；opacity 由狀態控制 */
 export function memoryMaterial() {
   return new MeshStandardMaterial({
-    color: 0x9fe8f0,
-    emissive: 0x39c6d8,
-    emissiveIntensity: 1.1,
+    color: 0x6fb8c4,
+    emissive: 0x2a9fb2,
+    emissiveIntensity: 0.4,
     roughness: 0.6,
     transparent: true,
     opacity: 0,

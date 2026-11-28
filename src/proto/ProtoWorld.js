@@ -483,9 +483,10 @@ export class ProtoWorld {
     const visible = form > 0.001;
     this.memPlanks.visible = this.memLog.visible = this.memRopes.visible = visible;
     const flicker = unstable ? 0.55 + 0.45 * Math.abs(Math.sin(t * 13 + Math.sin(t * 31))) : 1;
-    this.memMat.opacity = Math.min(0.92, form * 0.92) * flicker;
-    this.memMat.emissiveIntensity = (unstable ? 0.6 : 1.1) * flicker + (st === 'revealing' ? 0.8 * (1 - form) : 0);
-    this.memMat.emissive.setRGB(unstable ? 0.6 : 0.22, unstable ? 0.55 : 0.78, unstable ? 0.6 : 0.85);
+    // 亮度壓在光暈門檻附近：看得出一片一片的橋板，而不是一整條光柱
+    this.memMat.opacity = Math.min(0.8, form * 0.8) * flicker;
+    this.memMat.emissiveIntensity = (unstable ? 0.3 : 0.42) * flicker + (st === 'revealing' ? 0.6 * (1 - form) : 0);
+    this.memMat.emissive.setRGB(unstable ? 0.5 : 0.16, unstable ? 0.45 : 0.62, unstable ? 0.5 : 0.7);
     // 殘影光塵：人間時微弱閃爍（引起好奇）；靈界時跟著橋變亮
     const pos = this.motes.geometry.attributes.position;
     for (const [i, b] of this.moteBase.entries()) {
@@ -517,9 +518,9 @@ export class ProtoWorld {
     this.spiritBlend += ((this.spirit ? 1 : 0) - this.spiritBlend) * (1 - Math.exp(-dt * 4));
     const sb = this.spiritBlend;
     // 靈界的空氣：霧變成青藍、天光變冷、月亮變亮（不是整個畫面套藍色濾鏡：暖色的火與燈籠保持原色）
-    this.scene.fog.color.copy(this.fogColor).lerp(new Color(0x0a2a33), sb * 0.85);
-    this.scene.fog.density = 0.017 - 0.004 * sb;
-    this.hemi.color.setRGB(0.37 - 0.12 * sb, 0.47 + 0.12 * sb, 0.69 + 0.1 * sb);
+    this.scene.fog.color.copy(this.fogColor).lerp(new Color(0x0c2630), sb * 0.5);
+    this.scene.fog.density = 0.017 - 0.003 * sb;
+    this.hemi.color.setRGB(0.37 - 0.06 * sb, 0.47 + 0.06 * sb, 0.69 + 0.05 * sb);
     this.hemi.intensity = 1.2 + 0.25 * sb;
     this.moon.userData.halo.material.opacity = 0.45 + 0.35 * sb;
     this.motes.visible = true;
@@ -541,7 +542,7 @@ export class ProtoWorld {
     }
     // 火盆：火焰傾斜、煙的方向和量都直接讀風場——這是玩家判斷時機最主要的線索
     const bw = this.windAt(this.brazier.group.position, this.wind);
-    this.brazier.flame.update(t, { x: bw.x * 0.35, y: 0, z: bw.z * 0.35 }, 0.62);
+    this.brazier.flame.update(t, { x: bw.x * 0.35, y: 0, z: bw.z * 0.35 }, 0.4);
     this.brazier.light.intensity = 6.5 + Math.sin(t * 9) * 0.5 + Math.sin(t * 15.3) * 0.3;
     this.smokeTimer -= dt;
     if (this.smokeTimer <= 0) {
