@@ -21,6 +21,8 @@ import { FALL_REASONS, GATE, LAYOUT, Lantern, MEMORY_WALK_SPEED, gustAt, inBridg
  */
 const params = new URLSearchParams(location.search);
 const TEST = params.has('test');
+/** 自動化測試用：結局演出縮短成 0.5 秒（錄影不加這個參數，錄的是完整演出） */
+const FAST_ENDING = params.has('fastEnding');
 const $ = (id) => document.getElementById(id);
 const touch = window.matchMedia?.('(pointer: coarse)').matches || 'ontouchstart' in window;
 const L = LAYOUT;
@@ -611,11 +613,11 @@ function inspectPose(t, o) {
   const s = inspect.stele;
   if (!s) return;
   const { center, normal, side } = steleFrame(s);
-  const dist = 2.5 * inspect.zoom * (1 + 0.35 * (director.portraitFactor - 1));
+  const dist = 2.9 * inspect.zoom * (1 + 0.35 * (director.portraitFactor - 1));
   const dir = normal.clone().multiplyScalar(Math.cos(inspect.yaw)).addScaledVector(side, Math.sin(inspect.yaw));
   // 越過右肩看石碑：角色站在石碑左前方，鏡頭在右後上方，頭不會擋住刻紋
-  o.pos.copy(center).addScaledVector(dir, dist).addScaledVector(side, 1.0).add(new Vector3(0, 0.8 + inspect.pitch * 2, 0));
-  o.look.copy(center).addScaledVector(side, 0.1).add(new Vector3(0, -0.1, 0));
+  o.pos.copy(center).addScaledVector(dir, dist).addScaledVector(side, 1.35).add(new Vector3(0, 0.9 + inspect.pitch * 2, 0));
+  o.look.copy(center).addScaledVector(side, 0.12).add(new Vector3(0, -0.1, 0));
   o.fov = 40 + 6 * (director.portraitFactor - 1);
 }
 function updateInspect(dt, v) {
@@ -737,7 +739,7 @@ function startEnding() {
   sound.setMood('ending');
   setObjective('');
   // 直接從點燈的動作鏡頭接到結局鏡頭（不先回到自由鏡頭，避免跳一下）
-  director.play({ kind: 'cinematic', blendIn: 0.8, lockInput: true, duration: TEST ? 0.5 : 8.6, pose: cinematicPath(ENDING()), onEnd: () => showEnd() });
+  director.play({ kind: 'cinematic', blendIn: 0.8, lockInput: true, duration: FAST_ENDING ? 0.5 : 8.6, pose: cinematicPath(ENDING()), onEnd: () => showEnd() });
   note('ending');
 }
 function updateEnding(dt) {

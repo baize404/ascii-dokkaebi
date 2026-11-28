@@ -802,13 +802,13 @@ button:disabled {
   background: rgba(8, 13, 22, 0.82);
   border: 1px solid var(--line);
 }
-.ascii-moon {
-  color: var(--gold);
-  display: inline-block;
-  text-align: left;
-  margin: 0;
-  font-family: var(--mono);
-  text-shadow: 0 0 10px rgba(242, 189, 104, 0.5);
+.end-moon {
+  width: 96px;
+  height: 96px;
+  margin: 0 auto;
+  border-radius: 50%;
+  background: radial-gradient(circle at 38% 35%, #fff8e6, #f2d79a 55%, #c9a35c);
+  box-shadow: 0 0 40px rgba(242, 189, 104, 0.55), 0 0 120px rgba(242, 189, 104, 0.25);
 }
 .ending-label {
   color: var(--dim);

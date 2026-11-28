@@ -17,7 +17,7 @@ import { preview } from 'vite';
 
 const names = (process.argv[2] ?? 'keyboard,fall,timing,camera,pause,click,phone').split(',');
 const server = await preview({ preview: { port: 4187 }, logLevel: 'silent' });
-const base = server.resolvedUrls.local[0] + 'prototype.html?test';
+const base = server.resolvedUrls.local[0] + 'prototype.html?test&fastEnding';
 const browser = await chromium.launch({
   executablePath: process.env.CHROME_PATH || undefined,
   channel: process.env.CHROME_PATH ? undefined : 'chrome',

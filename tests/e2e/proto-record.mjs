@@ -20,7 +20,7 @@ import { preview } from 'vite';
 const outDir = process.argv[2] ?? 'docs/media';
 const takes = (process.argv[3] ?? 'intro,stele,winch,bridge,fall,ending').split(',');
 const quality = process.argv[4] ?? 'high';
-const server = await preview({ preview: { port: 4185 }, logLevel: 'silent' });
+const server = await preview({ preview: { port: 4185 }, build: { outDir: process.env.OUT_DIR ?? 'dist' }, logLevel: 'silent' });
 const browser = await chromium.launch({
   executablePath: process.env.CHROME_PATH || undefined,
   channel: process.env.CHROME_PATH ? undefined : 'chrome',
