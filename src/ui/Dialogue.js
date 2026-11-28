@@ -6,7 +6,7 @@ const CHOICE_LOCK_MS = 350;
 const TERM_PATTERN = new RegExp(`(${Object.keys(GLOSSARY).sort((a, b) => b.length - a.length).join('|')})`, 'g');
 
 /**
- * 對話框：說話者名字、ASCII 肖像與表情、逐字顯示、韓文詞彙註解、對話歷史、選項。
+ * 對話框：說話者名字與表情、逐字顯示、韓文詞彙註解、對話歷史、選項。
  * say() 逐句顯示、choose() 顯示選項，都回傳 Promise。
  * - 點一下或按 Space：打字中就直接顯示全文，否則換下一句。
  * - 選項在文字顯示完才出現，並短暫鎖定，避免連點時誤選；也可以用數字鍵選。

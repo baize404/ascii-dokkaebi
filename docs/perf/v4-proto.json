@@ -1,0 +1,110 @@
+{
+  "date": "2026-11-28T07:12:28.342Z",
+  "environment": "Linux 容器、Chrome 無頭模式、SwiftShader（CPU 模擬 WebGL，沒有實體顯示卡）。數字只能比較畫質之間的相對成本，不代表真實裝置。",
+  "results": [
+    {
+      "viewport": "桌面 1280×720",
+      "quality": "low",
+      "buffer": "1280×720",
+      "dpr": 1,
+      "bloom": false,
+      "fps": 4.6,
+      "avgMs": 215.3,
+      "p50Ms": 216.8,
+      "p95Ms": 250.1,
+      "maxMs": 266.6,
+      "hitches": 0
+    },
+    {
+      "viewport": "桌面 1280×720",
+      "quality": "medium",
+      "buffer": "1280×720",
+      "dpr": 1,
+      "bloom": false,
+      "fps": 3.6,
+      "avgMs": 278,
+      "p50Ms": 283.4,
+      "p95Ms": 316.7,
+      "maxMs": 366.7,
+      "hitches": 0
+    },
+    {
+      "viewport": "桌面 1280×720",
+      "quality": "high",
+      "buffer": "1280×720",
+      "dpr": 1,
+      "bloom": true,
+      "fps": 2.2,
+      "avgMs": 462,
+      "p50Ms": 500,
+      "p95Ms": 550,
+      "maxMs": 550,
+      "hitches": 0
+    },
+    {
+      "viewport": "桌面 1280×720",
+      "quality": "ultra",
+      "buffer": "1280×720",
+      "dpr": 1,
+      "bloom": true,
+      "fps": 2.1,
+      "avgMs": 466.3,
+      "p50Ms": 500,
+      "p95Ms": 549.9,
+      "maxMs": 549.9,
+      "hitches": 0
+    },
+    {
+      "viewport": "手機直式 390×844（DPR 2）",
+      "quality": "low",
+      "buffer": "390×844",
+      "dpr": 1,
+      "bloom": false,
+      "fps": 10.8,
+      "avgMs": 92.2,
+      "p50Ms": 83.4,
+      "p95Ms": 116.7,
+      "maxMs": 149.9,
+      "hitches": 0
+    },
+    {
+      "viewport": "手機直式 390×844（DPR 2）",
+      "quality": "medium",
+      "buffer": "585×1266",
+      "dpr": 1.5,
+      "bloom": false,
+      "fps": 4.7,
+      "avgMs": 213.4,
+      "p50Ms": 216.7,
+      "p95Ms": 266.6,
+      "maxMs": 283.3,
+      "hitches": 0
+    },
+    {
+      "viewport": "手機直式 390×844（DPR 2）",
+      "quality": "high",
+      "buffer": "780×1688",
+      "dpr": 2,
+      "bloom": true,
+      "fps": 2,
+      "avgMs": 509.4,
+      "p50Ms": 550,
+      "p95Ms": 633.3,
+      "maxMs": 633.3,
+      "hitches": 0
+    },
+    {
+      "viewport": "手機直式 390×844（DPR 2）",
+      "quality": "ultra",
+      "buffer": "780×1688",
+      "dpr": 2,
+      "bloom": true,
+      "fps": 1.8,
+      "avgMs": 546.6,
+      "p50Ms": 600,
+      "p95Ms": 666.6,
+      "maxMs": 666.6,
+      "hitches": 0
+    }
+  ]
+}

@@ -11,7 +11,7 @@
  *
  * 用法：npm run build && node tests/e2e/proto.mjs [情境,...]
  */
-import { writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { chromium } from 'playwright-core';
 import { preview } from 'vite';
 
@@ -153,15 +153,15 @@ const scenarios = {
     check(s.prompt.includes('調查'), `靠近時出現互動提示：「${s.prompt}」`);
     check(s.camera.shot === null, '只是經過石碑，鏡頭不會被強制拉近');
     await page.keyboard.press('KeyE');
-    await page.waitForTimeout(1500);
+    await page.waitForFunction(() => window.__proto.state().mode === 'inspect' && !window.__proto.state().camera.blending, null, { timeout: 20000 }).catch(() => {});
     s = await state();
-    check(s.mode === 'inspect' && s.camera.shot === 'inspect', '按 E 才進入調查視角');
+    check(s.mode === 'inspect' && s.camera.shot === 'inspect', '按 E 才進入調查視角（角色先走到石碑左前方、轉身）');
     await sweepStele(page, state);
     await page.waitForTimeout(400);
     s = await state();
     check(s.steles[0].seen && s.journal.includes('stele-eye'), `舉燈移動光照過刻紋：圖案浮現並記入日誌（覆蓋 ${Math.round(s.steles[0].coverage * 100)}%）`);
     await page.keyboard.press('KeyE');
-    await page.waitForTimeout(1200);
+    await page.waitForFunction(() => window.__proto.state().mode === 'playing' && !window.__proto.state().camera.blending, null, { timeout: 20000 }).catch(() => {});
     s = await state();
     check(s.mode === 'playing' && s.camera.shot === null && s.camera.userMode === 'third', '離開調查：回到原本的第三人稱鏡頭');
     await page.keyboard.press('KeyQ');
@@ -173,13 +173,13 @@ const scenarios = {
     s = await state();
     check(s.progress.plankCrossedAt !== null, '記錄走過記憶木板的時間');
     await page.keyboard.press('KeyE');
-    await page.waitForTimeout(1500);
+    await page.waitForFunction(() => window.__proto.state().mode === 'inspect' && !window.__proto.state().camera.blending, null, { timeout: 20000 }).catch(() => {});
     await sweepStele(page, state);
     await page.waitForTimeout(400);
     s = await state();
     check(s.journal.includes('stele-wind'), '第二塊石碑「風」顯影並記入日誌');
     await page.keyboard.press('Escape'); // 調查中 Esc = 離開調查
-    await page.waitForTimeout(1200);
+    await page.waitForFunction(() => window.__proto.state().mode === 'playing' && !window.__proto.state().camera.blending, null, { timeout: 20000 }).catch(() => {});
     s = await state();
     check(s.mode === 'playing' && !s.paused, 'Esc 離開調查（不是開暫停選單）');
     check(await keyWalk(page, state, -3.9, 11.5), '走回庭院');
@@ -552,7 +552,14 @@ for (const n of names) {
     check(false, `情境中斷：${e.message.split('\n')[0]}`);
   }
 }
-writeFileSync('tests/e2e/proto-results.json', JSON.stringify({ date: new Date().toISOString(), environment: 'Linux 容器、Chrome 無頭模式、SwiftShader（CPU 模擬 WebGL）', passed, failed, results }, null, 2));
+// 只重跑部分情境時，保留其他情境上一次的結果
+const file = 'tests/e2e/proto-results.json';
+let all = results;
+if (existsSync(file)) {
+  const prev = JSON.parse(readFileSync(file, 'utf8'));
+  all = [...(prev.results ?? []).filter((r) => !names.includes(r.scenario)), ...results];
+}
+writeFileSync(file, JSON.stringify({ date: new Date().toISOString(), environment: 'Linux 容器、Chrome 無頭模式、SwiftShader（CPU 模擬 WebGL）', passed: all.filter((r) => r.ok).length, failed: all.filter((r) => !r.ok).length, results: all }, null, 2));
 console.log(`\n${passed} 項通過，${failed} 項失敗`);
 await browser.close();
 await server.close();

@@ -1,8 +1,8 @@
 {
-  "date": "2026-11-28T06:04:41.843Z",
+  "date": "2026-11-28T07:20:27.540Z",
   "environment": "Linux 容器、Chrome 無頭模式、SwiftShader（CPU 模擬 WebGL）",
-  "passed": 74,
-  "failed": 1,
+  "passed": 75,
+  "failed": 0,
   "results": [
     {
       "scenario": "keyboard",
@@ -22,7 +22,7 @@
     {
       "scenario": "keyboard",
       "ok": true,
-      "label": "按 E 才進入調查視角"
+      "label": "按 E 才進入調查視角（角色先走到石碑左前方、轉身）"
     },
     {
       "scenario": "keyboard",
@@ -81,8 +81,8 @@
     },
     {
       "scenario": "keyboard",
-      "ok": false,
-      "label": "轉的時候左手握在把手上（誤差 0.187 公尺）"
+      "ok": true,
+      "label": "轉的時候左手握在把手上（誤差 0.025 公尺）"
     },
     {
       "scenario": "keyboard",
@@ -332,7 +332,7 @@
     {
       "scenario": "click",
       "ok": true,
-      "label": "點地面：走到點的位置（2.6, 12.3）"
+      "label": "點地面：走到點的位置（2.9, 11.7）"
     },
     {
       "scenario": "click",

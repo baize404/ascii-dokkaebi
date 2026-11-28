@@ -3,7 +3,7 @@ import { AdditiveBlending, DoubleSide, Group, Mesh, PlaneGeometry, ShaderMateria
 /**
  * 程序化火焰：兩片交叉的面，片段著色器用噪聲扭曲出不規則的淚滴形火焰，
  * 有白黃色的核心、橘色外焰、紅色邊緣，會隨時間伸縮、隨風傾斜。
- * 在 ASCII 模式裡火焰是一塊有形狀的亮區（尖端、傾斜都看得出來）；Hybrid 模式保留連續的光暈。
+（3.x 時代為 ASCII 調整過形狀；4.0 純 3D 沿用）火焰是一塊有形狀的亮區（尖端、傾斜都看得出來），保留連續的光暈。
  */
 const vertexShader = /* glsl */ `
   uniform float uTime;

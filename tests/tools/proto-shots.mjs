@@ -39,6 +39,12 @@ for (const name of shots) {
     await P('photo', [4.2, 1.6, 6.8], [6.2, 0.8, 4.5]);
   } else if (name === 'stele') {
     await P('photo', [3.4, 1.7, 13.2], [4.2, 1.2, 10.4]);
+  } else if (name === 'spirit') {
+    await P('setView', 'third');
+    await P('setCamera', { yaw: 0 });
+    await P('teleport', 0, 4.2, Math.PI);
+    await P('toggleSpirit');
+    await P('step', 40, 1 / 30);
   } else if (name === 'canyon') {
     await P('photo', [12, 5, 10], [0, -2, 0]);
   }
